@@ -98,6 +98,27 @@ function startHosting(fromSnapshot) {
   acc = 0;
   lastTickAt = performance.now();
   lastPublishAt = 0;
+  if (fromSnapshot) restartRunningPrograms(fromSnapshot);
+}
+
+function restartRunningPrograms(snap) {
+  const owners = new Set();
+  for (const d of Object.values((snap && snap.drones) || {})) {
+    if (d && d.owner && (d.state === 'running' || d.state === 'waiting')) owners.add(d.owner);
+  }
+  let restarted = 0;
+  let failed = 0;
+  for (const owner of owners) {
+    let text = '';
+    try { text = room.doc.getText(owner).toString(); } catch (e) { text = ''; }
+    if (!text.trim()) { world.stopProgram(owner); failed++; continue; }
+    const out = lang.compile(text, { allowed: allowedSet() });
+    if (out.errors && out.errors.length) { world.stopProgram(owner); failed++; continue; }
+    world.runProgram(owner, out.program);
+    restarted++;
+  }
+  if (restarted) ui.toast('Host changed — ' + restarted + (restarted === 1 ? ' program' : ' programs') + ' resumed');
+  if (failed) ui.toast(failed + (failed === 1 ? ' program' : ' programs') + ' could not resume — press Run again');
 }
 
 function stopHosting() {
@@ -225,6 +246,28 @@ async function driveHub(myHub) {
 
 /* ---------- room wiring ---------- */
 
+
+let colorSettled = false;
+function resolveColorClash(players) {
+  if (colorSettled || !room || !players) return;
+  const me = players[room.id];
+  if (!me) return;
+  const clash = Object.entries(players).some(([id, p]) =>
+    id !== room.id && p && p.color === me.color && (p.joinedAt || 0) <= (me.joinedAt || 0));
+  if (!clash) return;
+  const used = new Set(Object.entries(players)
+    .filter(([id]) => id !== room.id)
+    .map(([, p]) => p && p.color));
+  const free = COLORS.find((c) => !used.has(c.hex));
+  if (!free) { colorSettled = true; return; }
+  colorSettled = true;
+  me.color = free.hex;
+  try {
+    room.transport.set(TRANSPORT_PATHS.player(room.code, room.id) + '/color', free.hex);
+  } catch (e) { /* transport busy; the local value still applies */ }
+  ui.toast('That colour was taken — you are now ' + free.id);
+}
+
 function wireRoom(created) {
   room = created;
   ui.bindRoom(room);
@@ -233,7 +276,11 @@ function wireRoom(created) {
   ui.setHostInfo({ isHost: room.isHost, hostNick: hostNick() });
   muteBtn.hidden = false;
 
+  resolveColorClash(room.players);
+  setTimeout(() => { if (room) resolveColorClash(room.players); }, 1500);
+
   room.on('players', (players) => {
+    resolveColorClash(players);
     renderer.setPlayers(players);
     ui.setHostInfo({ isHost: room.isHost, hostNick: hostNick() });
     if (world && room.isHost) ensurePlayers(world, players);
@@ -247,7 +294,6 @@ function wireRoom(created) {
     if (isHost && !world) {
       startHosting(lastSnap);
       ui.toast('You are the host now');
-      ui.toast('Click ▶ again to restart your program');
     } else if (!isHost && world) {
       stopHosting();
     }

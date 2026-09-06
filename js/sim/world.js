@@ -1,4 +1,4 @@
-// Deterministic mining world: tiles, drones, actions, growth, hazards, unlock purchases and snapshots.
+// Deterministic mining world: tiles, drones, actions, growth, hazards, unlock purchases and snapshots. mine() rule: if the tile the drone faces holds a boulder it hits that boulder, otherwise it mines the ore under itself; in-flight moves retarget when the grid grows.
 
 import {
   ORE_INFO, MAX_GRID, WAIT_TIMEOUT_MS, DEATH_MS, BOULDER_HP, DIRS,
@@ -122,6 +122,9 @@ export function createWorld(options = {}) {
         return tile.ore;
       },
       can_mine() {
+        const p = stepInDir(d.x, d.y, d.dir, state.size);
+        const front = p ? tileAt(p.x, p.y) : null;
+        if (front && front.kind === 'boulder') return true;
         const tile = tileAt(d.x, d.y);
         if (!tile || tile.kind !== 'rock') return false;
         if (tile.ore === 'none' || tile.stage < 1) return false;
@@ -323,7 +326,30 @@ export function createWorld(options = {}) {
     return true;
   }
 
+  function facingTile(d) {
+    const p = stepInDir(d.x, d.y, d.dir, state.size);
+    if (!p) return null;
+    const tile = tileAt(p.x, p.y);
+    return tile ? { tile, x: p.x, y: p.y } : null;
+  }
+
   function doMine(d) {
+    const front = facingTile(d);
+    if (front && front.tile.kind === 'boulder') {
+      const nt = front.tile;
+      nt.hp -= 1;
+      if (nt.hp <= 0) {
+        nt.kind = 'rock';
+        nt.hp = 0;
+        nt.ore = 'none';
+        nt.stage = 0;
+        nt.stock = 0;
+        emit({ type: 'mined', droneId: d.id, owner: d.owner, ore: 'none', amount: 0, boulder: true, cleared: true, x: front.x, y: front.y });
+      } else {
+        emit({ type: 'mined', droneId: d.id, owner: d.owner, ore: 'none', amount: 0, boulder: true, cleared: false, x: front.x, y: front.y });
+      }
+      return true;
+    }
     const tile = tileAt(d.x, d.y);
     if (tile && tile.kind === 'rock' && tile.ore !== 'none') {
       if (tile.stage < 1) {
@@ -347,22 +373,6 @@ export function createWorld(options = {}) {
       tile.stage = 0;
       tile.stock = 0;
       emit({ type: 'mined', droneId: d.id, owner: d.owner, ore, amount, x: d.x, y: d.y, regrows: ore === 'stone' });
-      return true;
-    }
-    const p = stepInDir(d.x, d.y, d.dir, state.size);
-    const nt = p ? tileAt(p.x, p.y) : null;
-    if (nt && nt.kind === 'boulder') {
-      nt.hp -= 1;
-      if (nt.hp <= 0) {
-        nt.kind = 'rock';
-        nt.hp = 0;
-        nt.ore = 'none';
-        nt.stage = 0;
-        nt.stock = 0;
-        emit({ type: 'mined', droneId: d.id, owner: d.owner, ore: 'none', amount: 0, boulder: true, cleared: true, x: p.x, y: p.y });
-      } else {
-        emit({ type: 'mined', droneId: d.id, owner: d.owner, ore: 'none', amount: 0, boulder: true, cleared: false, x: p.x, y: p.y });
-      }
       return true;
     }
     return false;
@@ -557,6 +567,28 @@ export function createWorld(options = {}) {
     }
   }
 
+  function retargetMoves() {
+    for (const d of droneList()) {
+      const a = d.action;
+      if (!a || a.op !== 'move' || !isDir(a.dir)) continue;
+      const p = stepInDir(a.fromX, a.fromY, a.dir, state.size);
+      if (!p) continue;
+      const tile = tileAt(p.x, p.y);
+      const blocked = !tile || tile.kind === 'boulder' || !tileFree(p.x, p.y, d.id);
+      if (blocked) {
+        const inn = inv(d);
+        d.action = null;
+        d.x = a.fromX;
+        d.y = a.fromY;
+        inn.resume = false;
+        if (d.state !== 'dead') d.state = inn.runner ? 'running' : 'idle';
+        continue;
+      }
+      a.tx = p.x;
+      a.ty = p.y;
+    }
+  }
+
   function growGrid() {
     if (state.size >= MAX_GRID) return false;
     const oldSize = state.size;
@@ -582,6 +614,7 @@ export function createWorld(options = {}) {
     }
     state.tiles = next;
     state.size = newSize;
+    retargetMoves();
     emit({ type: 'grow', size: newSize, tiles: fresh });
     return true;
   }

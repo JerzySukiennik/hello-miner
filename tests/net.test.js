@@ -7,7 +7,9 @@ import { createMemoryHub, createMemoryTransport } from '../js/net/transport-memo
 import { COMPACT_EVERY } from '../js/net/yrelay.js';
 
 const require = createRequire(import.meta.url);
-const Y = require('../Niepotrzebne/nettest/node_modules/yjs');
+let Y;
+try { Y = require('yjs'); }
+catch (e) { Y = require('../Niepotrzebne/nettest/node_modules/yjs'); }
 
 let passed = 0;
 function check(name, fn) {
