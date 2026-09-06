@@ -40,4 +40,4 @@ export const SPEED_FACTOR = 0.85;
 export const WAIT_TIMEOUT_MS = 2000;
 export const DEATH_MS = 1500;
 
-export const TILE = { size: 1, gap: 0.06, height: 0.5 };
+export const TILE = { size: 1, gap: 0, height: 0.5 };

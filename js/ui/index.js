@@ -8,7 +8,7 @@ import { createDocs } from './docs.js';
 import { createToasts } from './toast.js';
 import { COLORS as DEFAULT_COLORS, ORE_INFO as DEFAULT_ORE_INFO } from '../shared/constants.js';
 
-const BASE_ALLOWED = [
+export const BASE_ALLOWED = [
   'True', 'False', 'None', 'and', 'or', 'not', 'in', 'pass', 'break', 'continue',
   'up', 'down', 'left', 'right', 'none', 'stone', 'len', 'str', 'int', 'abs', 'min', 'max',
 ];

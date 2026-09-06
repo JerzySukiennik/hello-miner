@@ -6,6 +6,8 @@ import { createTileField, TILE_MODELS, tileToWorld, gridRadius, STEP } from './t
 import { createDroneLayer, DRONE_MODELS } from './drone.js';
 import { createCameraRig } from './camera.js';
 import { createDustField, createBubbleLayer } from './effects.js';
+import { loadModels } from './models.js';
+import { ACTION_MS, SPEED_FACTOR } from '../shared/constants.js';
 
 export const MODELS = {
   tile: TILE_MODELS.tile,
@@ -13,6 +15,7 @@ export const MODELS = {
   boulder: TILE_MODELS.boulder,
   gas: TILE_MODELS.gas,
   lava: TILE_MODELS.lava,
+  charge: TILE_MODELS.charge,
   droneBody: DRONE_MODELS.body,
   droneArms: DRONE_MODELS.arms,
   droneRotor: DRONE_MODELS.rotor,
@@ -27,7 +30,8 @@ export function createRenderer(canvas, opts = {}) {
   const { renderer, scene, camera } = stage;
 
   const tiles = createTileField(scene, {
-    tile: MODELS.tile, ore: MODELS.ore, boulder: MODELS.boulder, gas: MODELS.gas, lava: MODELS.lava,
+    tile: MODELS.tile, ore: MODELS.ore, boulder: MODELS.boulder,
+    gas: MODELS.gas, lava: MODELS.lava, charge: MODELS.charge,
   });
   const dust = createDustField(scene);
   const drones = createDroneLayer(scene, {
@@ -44,6 +48,17 @@ export function createRenderer(canvas, opts = {}) {
   let t0 = 0;
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
+  let assets = null;
+  let disposed = false;
+
+  const ready = (opts.models === false ? Promise.resolve(null) : loadModels()).then((a) => {
+    if (disposed || !a) return null;
+    assets = a;
+    tiles.applyModels(a);
+    drones.applyModels(a);
+    stage.applyShadowFlags(scene);
+    return a;
+  });
 
   function fitToGrid(instant) {
     const size = snap ? snap.size : 1;
@@ -77,6 +92,23 @@ export function createRenderer(canvas, opts = {}) {
     bubbles.show(droneId, text, d.group, 0.42);
   }
 
+  const chargeList = [];
+  function collectCharges(s, ageMs) {
+    chargeList.length = 0;
+    const list = s.drones || {};
+    const arr = Array.isArray(list) ? list : Object.values(list);
+    const speed = Math.pow(SPEED_FACTOR, (s.levels && s.levels.speed) || 0);
+    for (const d of arr) {
+      const act = d && d.action;
+      if (!act || act.op !== 'place') continue;
+      const dur = (ACTION_MS.place || 400) * speed;
+      const p = Math.min(1, Math.max(0, (act.progress || 0) + ageMs / dur));
+      if (p >= 1) continue;
+      chargeList.push({ x: d.x, y: d.y, p });
+    }
+    return chargeList;
+  }
+
   function frame(tNow) {
     const now = tNow === undefined ? performance.now() : tNow;
     if (!t0) t0 = now;
@@ -89,6 +121,7 @@ export function createRenderer(canvas, opts = {}) {
     rig.update();
     if (snap) {
       tiles.update(tSec, dtSec);
+      tiles.updateCharges(collectCharges(snap, now - snapT), dtSec);
       drones.update(snap, now - snapT, tSec, dtSec, dust);
     }
     dust.update(dtSec);
@@ -136,6 +169,7 @@ export function createRenderer(canvas, opts = {}) {
   }
 
   function dispose() {
+    disposed = true;
     rig.dispose();
     bubbles.dispose();
     dust.dispose();
@@ -146,7 +180,8 @@ export function createRenderer(canvas, opts = {}) {
 
   return {
     setSnapshot, setPlayers, frame, bubble, pick, resize, dispose, fitToGrid, stats,
-    MODELS,
+    ready, MODELS,
+    get assets() { return assets; },
     three: { THREE, scene, camera, renderer, controls: rig.controls },
   };
 }

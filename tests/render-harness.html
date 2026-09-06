@@ -24,6 +24,7 @@
   <button id="b8">8x8</button>
   <button id="bfit">fitToGrid</button>
   <button id="bbub">bubble</button>
+  <button id="bplace">place d1</button>
   <button id="bkill">kill d3</button>
 </div>
 <script type="importmap">
@@ -62,7 +63,7 @@ function seedTiles(size) {
       else if (x === 0 && y === size - 1) kind = 'lava';
       else if (x === 1 && y === size - 1) kind = 'gas';
       else { ore = ORES[i % ORES.length]; stage = ((i * 37) % 100) / 100; }
-      tiles.push({ ore, stage, stock: 0, kind, hp });
+      tiles.push({ x, y, ore, stage, stock: 0, kind, hp });
     }
   }
   return tiles;
@@ -116,6 +117,13 @@ function tickWorld(dtMs) {
     else if (Math.random() < dtMs / 9000) t.stage = 0;
   }
   for (const d of Object.values(world.drones)) {
+    if (world.holdPlace && d.id === 'd1') {
+      d.state = 'running';
+      d.action = { op: 'place', progress: 0.75, fromX: d.x, fromY: d.y, ore: 'gold' };
+      const t = world.tiles[d.y * world.size + d.x];
+      if (t && t.kind === 'rock') { t.ore = 'none'; t.stage = 0; }
+      continue;
+    }
     if (d.state === 'dead') {
       d.deadT += dtMs;
       if (d.deadT >= DEATH_MS) { d.state = 'running'; d.deadT = 0; d.x = d.homeX; d.y = d.homeY; d.action = null; d.queue = []; }
@@ -169,7 +177,7 @@ function snapshot() {
   }
   return {
     t: world.t, size: world.size,
-    tiles: world.tiles.map((t) => ({ ore: t.ore, stage: t.stage, stock: t.stock, kind: t.kind, hp: t.hp })),
+    tiles: world.tiles.map((t) => ({ x: t.x, y: t.y, ore: t.ore, stage: t.stage, stock: t.stock, kind: t.kind, hp: t.hp })),
     drones, inv: world.inv, unlocked: world.unlocked, levels: world.levels,
     totalMined: world.totalMined, events: [],
   };
@@ -181,6 +189,11 @@ document.getElementById('b8').onclick = () => setSize(8);
 document.getElementById('bfit').onclick = () => renderer.fitToGrid();
 document.getElementById('bbub').onclick = () => renderer.bubble('d1', 'Hello, Miner');
 document.getElementById('bkill').onclick = () => { world.drones.d3.state = 'dead'; world.drones.d3.deadT = 0; };
+document.getElementById('bplace').onclick = () => {
+  world.holdPlace = !world.holdPlace;
+  if (!world.holdPlace) { world.drones.d1.action = null; world.drones.d1.elapsed = 0; world.drones.d1.queue = []; }
+};
+if (Q.get('place')) world.holdPlace = true;
 
 canvas.addEventListener('pointerdown', (e) => {
   const hit = renderer.pick(e.clientX, e.clientY);
@@ -199,6 +212,7 @@ let bubbleI = 0;
 
 const fps = { n: 0, acc: 0, val: 0 };
 window.__fps = fps;
+window.__harness = { world, tickWorld, snapshot, setSize, renderer };
 
 renderer.setSnapshot(snapshot(), performance.now());
 

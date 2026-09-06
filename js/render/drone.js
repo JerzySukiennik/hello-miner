@@ -81,8 +81,8 @@ function makeRotorGeometry() {
   return merged;
 }
 
-function makeBlurGeometry() {
-  const g = new THREE.CircleGeometry(0.31, 20);
+function makeBlurGeometry(radius) {
+  const g = new THREE.CircleGeometry(radius || 0.31, 20);
   g.rotateX(-Math.PI / 2);
   return g;
 }
@@ -124,8 +124,15 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
   group.name = 'drones';
   scene.add(group);
 
-  const bodyGeo = models.body();
-  const armsGeo = models.arms();
+  let bodyGeo = models.body();
+  let armsGeo = models.arms();
+  let ownBodyGeo = true;
+  let usingGLB = false;
+  const hubs = [];
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    hubs.push(new THREE.Vector3(Math.cos(a) * 0.44, 0.09, -Math.sin(a) * 0.44));
+  }
 
   const rotorMat = new THREE.MeshStandardMaterial({ color: 0x4a3826, roughness: 0.7, flatShading: true });
   const rotorMesh = new THREE.InstancedMesh(models.rotor(), rotorMat, MAX_DRONES * 4);
@@ -133,6 +140,7 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
   rotorMesh.count = 0;
   rotorMesh.castShadow = true;
   rotorMesh.receiveShadow = false;
+  rotorMesh.frustumCulled = false;
   group.add(rotorMesh);
 
   const blurMat = new THREE.MeshBasicMaterial({
@@ -145,6 +153,7 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
   blurMesh.castShadow = false;
   blurMesh.receiveShadow = false;
   blurMesh.userData.noShadow = true;
+  blurMesh.frustumCulled = false;
   blurMesh.renderOrder = 1;
   group.add(blurMesh);
 
@@ -157,6 +166,7 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
   ringMesh.userData.noShadow = true;
   ringMesh.castShadow = false;
   ringMesh.receiveShadow = false;
+  ringMesh.frustumCulled = false;
   ringMesh.renderOrder = 2;
   group.add(ringMesh);
 
@@ -177,15 +187,52 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
     return new THREE.Color(hex);
   }
 
+  const bodyMats = new Map();
+  let armMat = new THREE.MeshStandardMaterial({
+    color: ARM_COLOR, roughness: 0.85, flatShading: true,
+  });
+
+  function bodyMatFor(color) {
+    const key = color.getHexString();
+    let m = bodyMats.get(key);
+    if (!m) {
+      m = new THREE.MeshStandardMaterial({
+        color: color.clone(),
+        vertexColors: !usingGLB,
+        roughness: usingGLB ? 0.8 : 0.62,
+        metalness: 0.0,
+        flatShading: true,
+      });
+      bodyMats.set(key, m);
+    }
+    return m;
+  }
+
+  function clearFade(d) {
+    if (!d.fading) return;
+    d.fading = false;
+    d.body.material.dispose();
+    d.arms.material.dispose();
+    d.body.material = d.bodyMat;
+    d.arms.material = armMat;
+  }
+
+  function applyFade(d, fade) {
+    if (!d.fading) {
+      d.fading = true;
+      const b = d.bodyMat.clone();
+      const a = armMat.clone();
+      b.transparent = true; a.transparent = true;
+      d.body.material = b;
+      d.arms.material = a;
+    }
+    d.body.material.opacity = fade;
+    d.arms.material.opacity = fade;
+  }
+
   function makeDrone(id, owner, index) {
     const color = colorFor(owner, index);
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color, vertexColors: true, roughness: 0.62, metalness: 0.0,
-      flatShading: true, transparent: true, opacity: 1,
-    });
-    const armMat = new THREE.MeshStandardMaterial({
-      color: ARM_COLOR, roughness: 0.85, flatShading: true, transparent: true, opacity: 1,
-    });
+    const bodyMat = bodyMatFor(color);
     const g = new THREE.Group();
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.castShadow = true;
@@ -198,11 +245,25 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
     g.add(arms, body);
     group.add(g);
     return {
-      id, owner, group: g, body, arms, bodyMat, armMat, color,
+      id, owner, group: g, body, arms, frame: arms, bodyMat, color, fading: false,
       px: 0, pz: 0, ready: false, yaw: 0, phase: Math.random() * Math.PI * 2,
       deadT: 0, popT: 0, wrapHalf: -1, tilt: 0, mineFired: false,
       prevOp: null, prevProgress: 0, alive: true,
     };
+  }
+
+  function refreshMaterials() {
+    let i = 0;
+    for (const d of drones.values()) {
+      d.color = colorFor(d.owner, i++);
+      d.bodyMat = bodyMatFor(d.color);
+      if (d.fading) {
+        d.body.material.color.copy(d.color);
+      } else {
+        d.body.material = d.bodyMat;
+        d.arms.material = armMat;
+      }
+    }
   }
 
   function setPlayers(p) {
@@ -210,10 +271,48 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
     if (!p) return;
     if (Array.isArray(p)) { for (const q of p) players[q.id] = q; }
     else Object.assign(players, p);
-    let i = 0;
+    refreshMaterials();
+  }
+
+  function applyModels(assets) {
+    const dm = assets && assets.drone;
+    if (!dm || !dm.body || !dm.frame || !dm.rotor) return;
+    if (ownBodyGeo) { bodyGeo.dispose(); armsGeo.dispose(); }
+    bodyGeo = dm.body;
+    armsGeo = dm.frame;
+    ownBodyGeo = false;
+    usingGLB = true;
+
+    rotorMesh.geometry.dispose();
+    rotorMesh.geometry = dm.rotor;
+    if (dm.frameColor) rotorMat.color.copy(dm.frameColor);
+    rotorMat.roughness = dm.frameRoughness === undefined ? 0.55 : dm.frameRoughness;
+    rotorMat.metalness = 0.2;
+    rotorMat.flatShading = false;
+    rotorMat.needsUpdate = true;
+
+    if (dm.frameColor) armMat.color.copy(dm.frameColor);
+    armMat.roughness = dm.frameRoughness === undefined ? 0.55 : dm.frameRoughness;
+    armMat.metalness = 0.2;
+    armMat.flatShading = false;
+    armMat.needsUpdate = true;
+
+    if (dm.hubs && dm.hubs.length === 4) {
+      for (let i = 0; i < 4; i++) hubs[i].copy(dm.hubs[i]);
+    }
+    const br = dm.bladeRadius || 0.2;
+    blurMesh.geometry.dispose();
+    blurMesh.geometry = makeBlurGeometry(br * 1.04);
+    blurMat.opacity = 0.06;
+
+    for (const m of bodyMats.values()) {
+      m.vertexColors = false;
+      m.roughness = 0.8;
+      m.needsUpdate = true;
+    }
     for (const d of drones.values()) {
-      d.color = colorFor(d.owner, i++);
-      d.bodyMat.color.copy(d.color);
+      d.body.geometry = bodyGeo;
+      d.arms.geometry = armsGeo;
     }
   }
 
@@ -232,9 +331,8 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
       const present = Array.isArray(list) ? list.some((q) => q.id === id) : Object.prototype.hasOwnProperty.call(list, id);
       if (!present) {
         const d = drones.get(id);
+        clearFade(d);
         group.remove(d.group);
-        d.bodyMat.dispose();
-        d.armMat.dispose();
         drones.delete(id);
       }
     }
@@ -346,15 +444,13 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
       d.group.rotation.set(tilt, d.yaw, Math.sin(tSec * 1.5 + d.phase) * 0.03);
       d.group.scale.setScalar(scale);
       d.group.visible = fade > 0.02;
-      d.bodyMat.opacity = fade;
-      d.armMat.opacity = fade;
+      if (fade > 0.999) clearFade(d); else applyFade(d, fade);
 
       if (!dead && fade > 0.02) {
         d.group.updateMatrixWorld();
         const spin = tSec * 26 + d.phase;
         for (let r = 0; r < 4; r++) {
-          const a = Math.PI / 4 + (r * Math.PI) / 2;
-          tmpV.set(Math.cos(a) * 0.44, 0.09, -Math.sin(a) * 0.44);
+          tmpV.copy(hubs[r]);
           tmpQ.setFromAxisAngle(UP, spin * (r % 2 === 0 ? 1 : -1));
           tmpS.setScalar(1);
           tmpM.compose(tmpV, tmpQ, tmpS);
@@ -393,10 +489,12 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
   }
 
   function dispose() {
-    for (const d of drones.values()) { d.bodyMat.dispose(); d.armMat.dispose(); }
+    for (const d of drones.values()) clearFade(d);
+    for (const m of bodyMats.values()) m.dispose();
+    bodyMats.clear();
+    armMat.dispose();
     drones.clear();
-    bodyGeo.dispose();
-    armsGeo.dispose();
+    if (ownBodyGeo) { bodyGeo.dispose(); armsGeo.dispose(); }
     rotorMesh.geometry.dispose();
     rotorMat.dispose();
     blurMesh.geometry.dispose();
@@ -406,5 +504,5 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
     scene.remove(group);
   }
 
-  return { group, sync, setPlayers, update, pickables, getDrone, dispose };
+  return { group, sync, setPlayers, update, pickables, getDrone, applyModels, dispose };
 }

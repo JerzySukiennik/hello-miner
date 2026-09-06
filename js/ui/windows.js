@@ -117,7 +117,7 @@ export function createWindows(opts) {
       onCursor: (c) => opts.onCursor(id, c),
       onErrors: (errs) => {
         foot.classList.toggle('bad', errs.length > 0);
-        foot.textContent = errs.length ? 'Line ' + errs[0].line + ': ' + errs[0].message : 'ready';
+        foot.textContent = errs.length ? 'Line ' + errs[0].line + ': ' + (errs[0].raw || errs[0].message) : 'ready';
       },
     });
     el.querySelector('.win-body').appendChild(editor.el);

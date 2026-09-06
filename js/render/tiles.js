@@ -33,9 +33,42 @@ function rnd(seed) {
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
 }
 
+// Island body: flat slab, top face at y = 0, bottom at y = -BODY_H.
+const BODY_H = 0.55;
+// Tile tops are coplanar quads floating a hair above the slab top: no side faces
+// between neighbours means no hairline seams and nothing to z-fight.
+const TOP_Y = 0.002;
+// Tile edges are only hinted at by a very subtle darker rim baked into vertex colors.
+const RIM_W = 0.045;
+const RIM_K = 0.965;
+
 function makeTileGeometry() {
-  const g = new THREE.BoxGeometry(TILE.size, TILE.height, TILE.size);
-  g.translate(0, -TILE.height / 2, 0);
+  const h = TILE.size / 2;
+  const u = [-h, -h + RIM_W, h - RIM_W, h];
+  const pos = [];
+  const nor = [];
+  const col = [];
+  const idx = [];
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      pos.push(u[c], 0, u[r]);
+      nor.push(0, 1, 0);
+      const edge = r === 0 || r === 3 || c === 0 || c === 3;
+      const k = edge ? RIM_K : 1;
+      col.push(k, k, k);
+    }
+  }
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const a = r * 4 + c;
+      idx.push(a, a + 4, a + 5, a, a + 5, a + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
   return g;
 }
 
@@ -97,12 +130,27 @@ function makeLavaGeometry() {
   return g;
 }
 
+function makeChargeGeometry() {
+  const parts = [];
+  const can = new THREE.CylinderGeometry(0.09, 0.09, 0.22, 8, 1);
+  can.translate(0, 0.11, 0);
+  parts.push(can);
+  const stick = new THREE.CylinderGeometry(0.012, 0.012, 0.11, 4, 1);
+  stick.translate(0, 0.275, 0);
+  parts.push(stick);
+  const head = new THREE.IcosahedronGeometry(0.032, 0);
+  head.translate(0, 0.34, 0);
+  parts.push(head);
+  return mergeFlat(parts);
+}
+
 export const TILE_MODELS = {
   tile: makeTileGeometry,
   ore: makeOreGeometry,
   boulder: makeBoulderGeometry,
   gas: makeGasGeometry,
   lava: makeLavaGeometry,
+  charge: makeChargeGeometry,
 };
 
 export function createTileField(scene, models = TILE_MODELS) {
@@ -110,13 +158,15 @@ export function createTileField(scene, models = TILE_MODELS) {
   group.name = 'island';
   scene.add(group);
 
-  const tileMat = new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0.0 });
+  const tileMat = new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0.0, vertexColors: true });
   const tileMesh = new THREE.InstancedMesh(models.tile(), tileMat, CAP);
   tileMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   tileMesh.count = 0;
   tileMesh.receiveShadow = true;
-  tileMesh.castShadow = true;
+  tileMesh.castShadow = false;
+  tileMesh.userData.castShadow = false;
   tileMesh.name = 'tiles';
+  tileMesh.frustumCulled = false;
   group.add(tileMesh);
 
   const lavaMat = new THREE.MeshStandardMaterial({
@@ -128,6 +178,7 @@ export function createTileField(scene, models = TILE_MODELS) {
   lavaMesh.receiveShadow = false;
   lavaMesh.castShadow = false;
   lavaMesh.userData.noShadow = true;
+  lavaMesh.frustumCulled = false;
   group.add(lavaMesh);
 
   const boulderMat = new THREE.MeshStandardMaterial({ color: 0x8b8d8a, roughness: 1.0, flatShading: true });
@@ -136,6 +187,7 @@ export function createTileField(scene, models = TILE_MODELS) {
   boulderMesh.count = 0;
   boulderMesh.castShadow = true;
   boulderMesh.receiveShadow = true;
+  boulderMesh.frustumCulled = false;
   group.add(boulderMesh);
 
   const gasMat = new THREE.MeshStandardMaterial({
@@ -148,6 +200,7 @@ export function createTileField(scene, models = TILE_MODELS) {
   gasMesh.castShadow = false;
   gasMesh.receiveShadow = false;
   gasMesh.userData.noShadow = true;
+  gasMesh.frustumCulled = false;
   group.add(gasMesh);
 
   const oreMeshes = {};
@@ -165,44 +218,80 @@ export function createTileField(scene, models = TILE_MODELS) {
     m.count = 0;
     m.castShadow = true;
     m.receiveShadow = true;
+    m.frustumCulled = false;
     group.add(m);
     oreMeshes[ore] = m;
   }
 
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x5b4a3a, roughness: 1.0, flatShading: true });
+  const chargeMat = new THREE.MeshStandardMaterial({
+    color: 0xb03a1e, roughness: 0.7, metalness: 0.0, flatShading: true,
+    emissive: 0x521206, emissiveIntensity: 0.45,
+  });
+  const chargeMesh = new THREE.InstancedMesh((models.charge || makeChargeGeometry)(), chargeMat, CAP);
+  chargeMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  chargeMesh.count = 0;
+  chargeMesh.castShadow = true;
+  chargeMesh.receiveShadow = false;
+  chargeMesh.frustumCulled = false;
+  group.add(chargeMesh);
+
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0.95, metalness: 0.0, flatShading: true, vertexColors: true,
+  });
   let rockMesh = null;
   let rockSize = -1;
+
+  const BODY_TOP = new THREE.Color(0xd9a75f);
+  const BODY_SIDE = new THREE.Color(0xb8863f);
+  const BODY_BOTTOM = new THREE.Color(0x9a6f33);
+  const BODY_PEBBLE = new THREE.Color(0x8e918d);
+
+  // Paints a non-indexed geometry with one flat color, or per-face by normal.y when byNormal.
+  function paint(geo, byNormal) {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    if (g !== geo) geo.dispose();
+    if (!g.attributes.normal) g.computeVertexNormals();
+    const n = g.attributes.position.count;
+    const nor = g.attributes.normal;
+    const arr = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      let c = byNormal || BODY_SIDE;
+      if (!byNormal || byNormal === true) {
+        const ny = nor.getY(i);
+        c = ny > 0.7 ? BODY_TOP : (ny < -0.7 ? BODY_BOTTOM : BODY_SIDE);
+      }
+      arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b;
+    }
+    g.setAttribute('color', new THREE.Float32BufferAttribute(arr, 3));
+    return g;
+  }
 
   function buildRock(size) {
     if (rockMesh) { group.remove(rockMesh); rockMesh.geometry.dispose(); rockMesh = null; }
     const w = size * STEP;
     const rand = rnd(size * 3301 + 7);
     const parts = [];
-    const slab = new THREE.BoxGeometry(w * 0.995, 0.34, w * 0.995);
-    slab.translate(0, -TILE.height - 0.17, 0);
-    parts.push(slab);
-    const th = w * 0.34 + 0.5;
-    const taper = new THREE.CylinderGeometry(w * 0.55, w * 0.12, th, 7, 1);
-    taper.rotateY(0.42);
-    taper.translate(0, -TILE.height - 0.34 - th / 2, 0);
-    parts.push(taper);
-    const sh = w * 0.2 + 0.32;
-    const spike = new THREE.ConeGeometry(w * 0.115, sh, 6, 1);
-    spike.rotateX(Math.PI);
-    spike.translate(0, -TILE.height - 0.34 - th - sh / 2 + 0.12, 0);
-    parts.push(spike);
-    const pebbles = 7 + size * 2;
+    const slab = new THREE.BoxGeometry(w, BODY_H, w);
+    slab.translate(0, -BODY_H / 2, 0);
+    parts.push(paint(slab, true));
+    const pebbles = 6 + size * 2;
     for (let i = 0; i < pebbles; i++) {
-      const r = 0.08 + rand() * 0.15;
+      const r = 0.055 + rand() * 0.075;
       const g = new THREE.IcosahedronGeometry(r, 0);
-      g.scale(1, 0.72, 1);
-      const a = rand() * Math.PI * 2;
-      const d = w * (0.22 + rand() * 0.24);
-      g.translate(Math.cos(a) * d, -TILE.height - 0.26 - rand() * (th * 0.85), Math.sin(a) * d);
-      parts.push(g);
+      g.scale(1, 0.8, 1);
+      const side = i % 4;
+      const t = (rand() - 0.5) * w * 0.82;
+      const h = -0.13 - rand() * (BODY_H - 0.26);
+      const edge = w / 2 - r * 0.45;
+      if (side === 0) g.translate(t, h, edge);
+      else if (side === 1) g.translate(t, h, -edge);
+      else if (side === 2) g.translate(edge, h, t);
+      else g.translate(-edge, h, t);
+      parts.push(paint(g, BODY_PEBBLE));
     }
-    const merged = mergeFlat(parts);
-    rockMesh = new THREE.Mesh(merged, rockMat);
+    const merged = mergeGeometries(parts, false);
+    parts.forEach((p) => p.dispose());
+    rockMesh = new THREE.Mesh(merged, bodyMat);
     rockMesh.castShadow = true;
     rockMesh.receiveShadow = true;
     rockMesh.name = 'islandRock';
@@ -215,9 +304,7 @@ export function createTileField(scene, models = TILE_MODELS) {
   const quat = new THREE.Quaternion();
   const vpos = new THREE.Vector3();
   const vscale = new THREE.Vector3();
-  const colA = new THREE.Color(0xd9a75f);
-  const colB = new THREE.Color(0xc98f4a);
-  const colBoulderTile = new THREE.Color(0x9a8266);
+  const colTile = new THREE.Color(0xd9a75f);
   const colLavaTile = new THREE.Color(0x6b4430);
   const tmpCol = new THREE.Color();
 
@@ -245,10 +332,9 @@ export function createTileField(scene, models = TILE_MODELS) {
         mat4.makeTranslation(vpos.x, 0, vpos.z);
         lavaMesh.setMatrixAt(li++, mat4);
       }
-      mat4.makeTranslation(vpos.x, 0, vpos.z);
+      mat4.makeTranslation(vpos.x, TOP_Y, vpos.z);
       tileMesh.setMatrixAt(ti, mat4);
-      const base = ((x + y) & 1) ? colA : colB;
-      tmpCol.copy(kind === 'boulder' ? colBoulderTile : (kind === 'lava' ? colLavaTile : base));
+      tmpCol.copy(kind === 'lava' ? colLavaTile : colTile);
       tileMesh.setColorAt(ti, tmpCol);
       ti++;
       if (kind === 'boulder') {
@@ -341,6 +427,67 @@ export function createTileField(scene, models = TILE_MODELS) {
     if (gasList.length) gasMesh.instanceMatrix.needsUpdate = true;
   }
 
+  const charges = new Map();
+
+  function updateCharges(list, dtSec) {
+    const seen = new Set();
+    if (list) {
+      for (const c of list) {
+        const key = c.x + ':' + c.y;
+        seen.add(key);
+        let st = charges.get(key);
+        if (!st) { st = { x: c.x, y: c.y, shown: 0 }; charges.set(key, st); }
+        st.target = c.p;
+      }
+    }
+    for (const [key, st] of charges) {
+      if (!seen.has(key)) st.target = 0;
+      st.shown += (st.target - st.shown) * Math.min(1, dtSec * 14);
+      if (!seen.has(key) && st.shown < 0.02) charges.delete(key);
+    }
+    let i = 0;
+    for (const st of charges.values()) {
+      const p = Math.max(0, Math.min(1, st.shown));
+      const s = p * (1 + Math.sin(p * Math.PI) * 0.18);
+      if (s < 0.02) continue;
+      tileToWorld(st.x, st.y, size, vpos);
+      vscale.set(s, s, s);
+      quat.setFromAxisAngle(UP, st.x * 1.1 + st.y * 0.7);
+      mat4.compose(vpos, quat, vscale);
+      chargeMesh.setMatrixAt(i++, mat4);
+    }
+    chargeMesh.count = i;
+    chargeMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  let ownGeo = { ore: true, boulder: true, charge: true };
+
+  function applyModels(assets) {
+    if (!assets) return;
+    for (const ore of ORES) {
+      const g = assets.ores && assets.ores[ore];
+      if (!g) continue;
+      if (ownGeo.ore) oreMeshes[ore].geometry.dispose();
+      oreMeshes[ore].geometry = g;
+    }
+    ownGeo.ore = false;
+    if (assets.boulder) {
+      if (ownGeo.boulder) boulderMesh.geometry.dispose();
+      boulderMesh.geometry = assets.boulder;
+      ownGeo.boulder = false;
+    }
+    if (assets.charge) {
+      if (ownGeo.charge) chargeMesh.geometry.dispose();
+      chargeMesh.geometry = assets.charge;
+      ownGeo.charge = false;
+      if (assets.chargeColor) {
+        chargeMat.color.copy(assets.chargeColor);
+        chargeMat.emissive.copy(assets.chargeColor).multiplyScalar(0.35);
+      }
+    }
+    sig = '';
+  }
+
   function pickables() {
     return [tileMesh, lavaMesh];
   }
@@ -359,10 +506,14 @@ export function createTileField(scene, models = TILE_MODELS) {
     lavaMesh.geometry.dispose(); lavaMat.dispose();
     boulderMesh.geometry.dispose(); boulderMat.dispose();
     gasMesh.geometry.dispose(); gasMat.dispose();
+    chargeMesh.geometry.dispose(); chargeMat.dispose();
     for (const ore of ORES) { oreMeshes[ore].geometry.dispose(); oreMeshes[ore].material.dispose(); }
     if (rockMesh) rockMesh.geometry.dispose();
-    rockMat.dispose();
+    bodyMat.dispose();
   }
 
-  return { group, setSnapshot, update, pickables, tileAtPoint, dispose, getSize: () => size };
+  return {
+    group, setSnapshot, update, updateCharges, applyModels,
+    pickables, tileAtPoint, dispose, getSize: () => size,
+  };
 }
