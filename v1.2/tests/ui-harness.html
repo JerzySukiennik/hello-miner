@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hello, Miner — UI harness</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/ui.css">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #6f8aa0; }
+  #fake-scene { position: fixed; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,.25); font: 600 22px 'Fredoka', sans-serif; }
+  #devbar { position: fixed; bottom: 12px; right: 12px; z-index: 50; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 40vw; }
+  #devbar button { font: 500 11px 'Fredoka', sans-serif; background: rgba(28,30,36,.86); color: #e8eaef; border: 1px solid rgba(255,255,255,.14); border-radius: 7px; padding: 5px 9px; cursor: pointer; }
+</style>
+<script type="importmap">
+{ "imports": { "yjs": "https://cdn.jsdelivr.net/npm/yjs@13.6.18/+esm" } }
+</script>
+</head>
+<body>
+<div id="fake-scene">3D scene lives here</div>
+<div id="devbar"></div>
+
+<script type="module">
+import * as Y from 'yjs';
+import { createUI } from '../js/ui/index.js';
+import { COLORS, ORE_INFO } from '../js/shared/constants.js';
+
+/* ---------- fake lang ---------- */
+
+const KEYWORDS = ['if','elif','else','while','for','in','def','return','repeat','break','continue','pass','and','or','not','True','False','None'];
+const BUILTINS = ['move','mine','can_mine','place','get_ore','scan','get_pos_x','get_pos_y','get_world_size','count','wait','print','spawn_drone','len','range','str','int','abs','min','max'];
+const CONSTS = ['up','down','left','right','stone','coal','iron','gold','crystal','none'];
+const KW = new Set(KEYWORDS), BI = new Set(BUILTINS), CO = new Set(CONSTS);
+
+function tokenize(src) {
+  const out = [];
+  const lines = src.split('\n');
+  for (let li = 0; li < lines.length; li++) {
+    const raw = lines[li];
+    let i = 0;
+    while (i < raw.length) {
+      const c = raw[i];
+      if (c === ' ' || c === '\t') { i++; continue; }
+      if (c === '#') { out.push({ type: 'comment', value: raw.slice(i), line: li + 1, col: i }); break; }
+      if (c === '"' || c === "'") {
+        let j = i + 1;
+        while (j < raw.length && raw[j] !== c) j++;
+        const v = raw.slice(i, Math.min(j + 1, raw.length));
+        out.push({ type: 'string', value: v, line: li + 1, col: i });
+        i += v.length; continue;
+      }
+      let m = /^\d+(\.\d+)?/.exec(raw.slice(i));
+      if (m) { out.push({ type: 'number', value: m[0], line: li + 1, col: i }); i += m[0].length; continue; }
+      m = /^[A-Za-z_]\w*/.exec(raw.slice(i));
+      if (m) {
+        const t = KW.has(m[0]) ? 'keyword' : (BI.has(m[0]) || CO.has(m[0])) ? 'builtin' : 'ident';
+        out.push({ type: t, value: m[0], line: li + 1, col: i });
+        i += m[0].length; continue;
+      }
+      m = /^(==|!=|<=|>=|\+=|-=|\*=|\/\/|[-+*/%<>=(){}\[\],:.])/.exec(raw.slice(i));
+      if (m) { out.push({ type: 'op', value: m[0], line: li + 1, col: i }); i += m[0].length; continue; }
+      i++;
+    }
+    out.push({ type: 'newline', value: '\n', line: li + 1, col: raw.length });
+  }
+  return out;
+}
+
+function near(name) {
+  let best = null, bd = 99;
+  for (const k of [...BUILTINS, ...KEYWORDS]) {
+    const d = lev(name, k);
+    if (d < bd) { bd = d; best = k; }
+  }
+  return bd <= 2 ? best : null;
+}
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+}
+
+function compile(src, o) {
+  const allowed = (o && o.allowed) || null;
+  const errors = [];
+  const toks = tokenize(src);
+  const declared = new Set();
+  for (let i = 0; i < toks.length; i++) if (toks[i].type === 'keyword' && toks[i].value === 'def' && toks[i + 1]) declared.add(toks[i + 1].value);
+  for (const m of src.matchAll(/(?:^|\n)\s*([A-Za-z_]\w*)\s*=[^=]/g)) declared.add(m[1]);
+  const lines = src.split('\n');
+  for (let li = 0; li < lines.length; li++) {
+    let depth = 0;
+    for (const ch of lines[li]) { if (ch === '(') depth++; if (ch === ')') depth--; }
+    if (depth > 0) errors.push({ line: li + 1, col: lines[li].length, message: 'missing ")"' });
+    if (depth < 0) errors.push({ line: li + 1, col: 0, message: 'extra ")"' });
+  }
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    const next = toks[i + 1];
+    if (t.type === 'ident' && next && next.value === '(' && !declared.has(t.value)) {
+      const s = near(t.value);
+      errors.push({ line: t.line, col: t.col, message: '"' + t.value + '" is not a command.' + (s ? ' Did you mean "' + s + '"?' : '') });
+    } else if ((t.type === 'builtin' || t.type === 'keyword') && allowed && allowed.size && !allowed.has(t.value)) {
+      errors.push({ line: t.line, col: t.col, message: '"' + t.value + '" is locked. Unlock it in the tree.' });
+    }
+  }
+  errors.sort((a, b) => a.line - b.line);
+  return { program: { src }, errors: errors.slice(0, 12) };
+}
+
+const lang = { tokenize, compile, KEYWORDS, BUILTINS };
+
+/* ---------- fake TREE ---------- */
+
+const TREE = [
+  { id: 'loops', name: 'Repeat', desc: 'repeat(n) and while loops.', levels: 1, requires: [], cost: [{ stone: 4 }], unlocks: ['repeat', 'while'] },
+  { id: 'grid', name: 'Bigger island', desc: 'Grow the grid one tile wider.', levels: 7, requires: ['loops'], cost: [{ stone: 6 }, { stone: 14 }, { stone: 30, coal: 6 }, { coal: 20 }, { iron: 18 }, { gold: 14 }, { crystal: 10 }], unlocks: [] },
+  { id: 'vars', name: 'Variables', desc: 'x = 2 and if / elif / else.', levels: 1, requires: ['loops'], cost: [{ stone: 10 }], unlocks: ['if', 'elif', 'else'] },
+  { id: 'speed', name: 'Rotor speed', desc: 'Every action gets 15% faster.', levels: 5, requires: ['grid'], cost: [{ stone: 12 }, { coal: 10 }, { iron: 12 }, { gold: 10 }, { crystal: 8 }], unlocks: [] },
+  { id: 'sensors', name: 'Sensors', desc: 'get_ore, can_mine, position, size.', levels: 1, requires: ['vars'], cost: [{ stone: 16 }], unlocks: ['get_ore', 'can_mine', 'get_pos_x', 'get_pos_y', 'get_world_size'] },
+  { id: 'print', name: 'Speech', desc: 'print() over the drone.', levels: 1, requires: ['vars'], cost: [{ stone: 8 }], unlocks: ['print'] },
+  { id: 'coal', name: 'Coal', desc: 'Coal seeds and coal ore.', levels: 1, requires: ['sensors'], cost: [{ stone: 24 }], unlocks: ['coal'] },
+  { id: 'place', name: 'Planting', desc: 'place(ore) and count(ore).', levels: 1, requires: ['sensors'], cost: [{ stone: 20 }], unlocks: ['place', 'count'] },
+  { id: 'wait', name: 'Patience', desc: 'wait(seconds) while ore grows.', levels: 1, requires: ['print'], cost: [{ stone: 12 }], unlocks: ['wait'] },
+  { id: 'functions', name: 'Functions', desc: 'def and return.', levels: 1, requires: ['print'], cost: [{ coal: 14 }], unlocks: ['def', 'return'] },
+  { id: 'iron', name: 'Iron', desc: 'Iron grows next to stone or coal.', levels: 1, requires: ['coal'], cost: [{ coal: 22 }], unlocks: ['iron'] },
+  { id: 'scan', name: 'Scanner', desc: 'scan(dir) spots lava and gas.', levels: 1, requires: ['place'], cost: [{ coal: 18 }], unlocks: ['scan'] },
+  { id: 'for_loops', name: 'For loops', desc: 'for x in list and range(n).', levels: 1, requires: ['functions'], cost: [{ coal: 20 }], unlocks: ['for', 'range', 'in'] },
+  { id: 'lists', name: 'Lists', desc: '[1, 2, 3], indexing and len().', levels: 1, requires: ['for_loops'], cost: [{ iron: 12 }], unlocks: ['list', 'len'] },
+  { id: 'gold', name: 'Gold', desc: 'Gold ore and the drill.', levels: 1, requires: ['iron'], cost: [{ iron: 20 }], unlocks: ['gold', 'drill'] },
+  { id: 'dicts', name: 'Dicts', desc: '{key: value} lookups.', levels: 1, requires: ['lists'], cost: [{ iron: 18 }], unlocks: ['dict'] },
+  { id: 'drones', name: 'More drones', desc: 'spawn_drone(f), up to 4 drones.', levels: 3, requires: ['lists', 'gold'], cost: [{ gold: 10 }, { gold: 22 }, { crystal: 12 }], unlocks: ['spawn_drone'] },
+  { id: 'crystal', name: 'Crystal', desc: 'Shatters if mined too early.', levels: 1, requires: ['gold'], cost: [{ gold: 20 }], unlocks: ['crystal'] },
+];
+
+/* ---------- fake room ---------- */
+
+const doc = new Y.Doc();
+const ME = 'p1';
+const BOT = 'p2';
+const players = {
+  p1: { nick: 'jurek', color: COLORS[0].hex },
+  p2: { nick: 'narek', color: COLORS[1].hex },
+};
+const states = {
+  p1: { nick: 'jurek', color: COLORS[0].hex, cursor: null },
+  p2: { nick: 'narek', color: COLORS[1].hex, cursor: { win: ME, index: 0, anchor: 0 } },
+};
+const handlers = {};
+const room = {
+  id: ME,
+  code: 'MINE',
+  isHost: true,
+  players,
+  doc,
+  awareness: {
+    set(st) { Object.assign(states[ME], st); },
+    get() { return states; },
+  },
+  on(ev, fn) { (handlers[ev] = handlers[ev] || []).push(fn); },
+};
+const fire = (ev) => (handlers[ev] || []).forEach((f) => f(ev === 'players' ? players : states));
+
+doc.getText(ME).insert(0, 'repeat(4):\n    mine()\n    move(right)\n');
+doc.getText(BOT).insert(0, 'while True:\n    if can_mine():\n        mine()\n    move(up)\n');
+
+/* ---------- UI ---------- */
+
+const ui = createUI({ root: document.body, lang, TREE, COLORS, ORE_INFO });
+window.__ui = ui;
+window.__room = room;
+
+const levels = { loops: 1, vars: 1, grid: 2, print: 1, sensors: 1 };
+const unlocked = ['move', 'mine', 'repeat', 'while', 'if', 'elif', 'else', 'print',
+  'get_ore', 'can_mine', 'get_pos_x', 'get_pos_y', 'get_world_size', 'True', 'False'];
+const inv = { stone: 42, coal: 12, iron: 0, gold: 0, crystal: 0 };
+let t = 0;
+let pendingEvents = [];
+
+function snapshot() {
+  t += 1;
+  return {
+    t, size: 3, tiles: [],
+    drones: {
+      d1: { id: 'd1', owner: ME, x: 1, y: 1, dir: 'up', line: 2 + (t % 3), state: 'running' },
+      d2: { id: 'd2', owner: BOT, x: 2, y: 0, dir: 'up', line: 1 + (t % 4), state: 'running' },
+    },
+    inv, unlocked, levels,
+    events: pendingEvents.splice(0),
+  };
+}
+
+ui.on('create', (d) => start(d));
+ui.on('join', (d) => start(d));
+ui.on('run', (e) => { ui.setRunning(e.playerId, true); ui.toast('Running ' + players[e.playerId].nick + "'s program"); });
+ui.on('stop', (e) => { ui.setRunning(e.playerId, false); ui.toast('Stopped'); });
+ui.on('buy', (e) => {
+  const node = TREE.find((n) => n.id === e.nodeId);
+  const lv = levels[e.nodeId] || 0;
+  const cost = node.cost[lv] || {};
+  for (const [o, v] of Object.entries(cost)) inv[o] -= v;
+  levels[e.nodeId] = lv + 1;
+  for (const u of node.unlocks || []) if (!unlocked.includes(u)) unlocked.push(u);
+  pendingEvents.push({ type: 'bought', nodeId: node.id, name: node.name });
+  ui.setSnapshot(snapshot());
+});
+
+function start(d) {
+  players[ME].nick = d.nick;
+  players[ME].color = d.color;
+  states[ME].nick = d.nick;
+  states[ME].color = d.color;
+  ui.hideLobby();
+  ui.bindRoom(room);
+  ui.setHostInfo({ isHost: true, hostNick: d.nick });
+  ui.setSnapshot(snapshot());
+  ui.setRunning(ME, true);
+  ui.toast('Room MINE is live');
+  if (new URLSearchParams(location.search).has('still')) { botCursor(); botType(); return; }
+  setInterval(() => { inv.stone += 1; ui.setSnapshot(snapshot()); }, 1200);
+  setInterval(botCursor, 1400);
+  setInterval(botType, 3000);
+  setInterval(botEditMine, 9000);
+}
+
+let bc = 0;
+function botCursor() {
+  const text = doc.getText(ME).toString();
+  bc = (bc + 7) % Math.max(1, text.length);
+  states[BOT].cursor = { win: ME, index: bc, anchor: Math.max(0, bc - 4) };
+  fire('awareness');
+}
+
+let bt = 0;
+const BOT_LINES = ['    wait(1)\n', '    print("hi")\n', '    move(left)\n'];
+function botType() {
+  const y = doc.getText(BOT);
+  doc.transact(() => {
+    if (y.length > 220) y.delete(0, y.length);
+    y.insert(y.length, BOT_LINES[bt++ % BOT_LINES.length]);
+  }, 'remote');
+  states[BOT].cursor = { win: BOT, index: y.length, anchor: y.length };
+  fire('awareness');
+}
+
+function botEditMine() {
+  const y = doc.getText(ME);
+  doc.transact(() => y.insert(0, '# narek was here\n'), 'remote');
+}
+
+/* ---------- dev buttons ---------- */
+
+const bar = document.getElementById('devbar');
+[
+  ['remote edit', botEditMine],
+  ['remote cursor', botCursor],
+  ['grow', () => { pendingEvents.push({ type: 'grow', size: 4 }); ui.setSnapshot(snapshot()); }],
+  ['error toast', () => ui.toast('Line 3: "mvoe" is not a command. Did you mean "move"?', 'error')],
+  ['+ore', () => { inv.stone += 25; inv.coal += 25; inv.iron += 20; inv.gold += 20; ui.setSnapshot(snapshot()); }],
+  ['lobby', () => ui.showLobby()],
+].forEach(([label, fn]) => {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.addEventListener('click', fn);
+  bar.appendChild(b);
+});
+
+const qs = new URLSearchParams(location.search);
+if (qs.has('auto')) {
+  start({ nick: 'jurek', color: COLORS[0].hex, code: 'MINE' });
+  if (qs.get('panel') === 'tree') document.querySelector('.h-tree').click();
+  if (qs.get('panel') === 'docs') document.querySelector('.h-docs').click();
+}
+</script>
+</body>
+</html>
