@@ -1,4 +1,4 @@
-// Tokenizer with tolerant INDENT/DEDENT for the Hello, Miner language.
+// Tokenizer with tolerant INDENT/DEDENT; an unclosed bracket is reported on its own opening line.
 
 import { LangError } from './errors.js';
 
@@ -20,6 +20,25 @@ const OPERATORS = [
 const OPEN = { '(': ')', '[': ']', '{': '}' };
 const CLOSE = new Set([')', ']', '}']);
 
+const STATEMENT_STARTERS = new Set([
+  'if', 'elif', 'else', 'while', 'for', 'def', 'return',
+  'break', 'continue', 'pass', 'repeat',
+]);
+
+function startsNewStatement(lines, from) {
+  for (let k = from; k < lines.length; k++) {
+    const s = lines[k].trim();
+    if (s === '' || s[0] === '#') continue;
+    const m = /^([A-Za-z_][A-Za-z0-9_]*)/.exec(s);
+    return !!(m && STATEMENT_STARTERS.has(m[1]));
+  }
+  return true;
+}
+
+function unclosedError(open) {
+  return new LangError(`missing "${OPEN[open.value]}"`, open.line, open.col);
+}
+
 function isDigit(ch) {
   return ch >= '0' && ch <= '9';
 }
@@ -37,7 +56,7 @@ export function tokenize(source) {
   const lines = text.split(/\r\n|\r|\n/);
   const tokens = [];
   const stack = [0];
-  let depth = 0;
+  const brackets = [];
   let lastWasNewline = true;
 
   const push = (type, value, line, col) => {
@@ -50,7 +69,7 @@ export function tokenize(source) {
     const lineNo = li + 1;
     let i = 0;
 
-    if (depth === 0) {
+    if (brackets.length === 0) {
       let width = 0;
       while (i < line.length && (line[i] === ' ' || line[i] === '\t')) {
         width = line[i] === '\t' ? (Math.floor(width / TAB_WIDTH) + 1) * TAB_WIDTH : width + 1;
@@ -147,8 +166,8 @@ export function tokenize(source) {
         }
       }
       if (matched) {
-        if (OPEN[matched]) depth++;
-        else if (CLOSE.has(matched) && depth > 0) depth--;
+        if (OPEN[matched]) brackets.push({ value: matched, line: lineNo, col });
+        else if (CLOSE.has(matched) && brackets.length > 0) brackets.pop();
         push('op', matched, lineNo, col);
         i += matched.length;
         continue;
@@ -157,10 +176,14 @@ export function tokenize(source) {
       throw new LangError(`I do not understand the character "${ch}"`, lineNo, col);
     }
 
-    if (depth === 0 && !lastWasNewline && tokens.length > 0) {
-      push('newline', '', lineNo, line.length + 1);
+    if (brackets.length === 0) {
+      if (!lastWasNewline && tokens.length > 0) push('newline', '', lineNo, line.length + 1);
+    } else if (startsNewStatement(lines, li + 1)) {
+      throw unclosedError(brackets[brackets.length - 1]);
     }
   }
+
+  if (brackets.length > 0) throw unclosedError(brackets[brackets.length - 1]);
 
   const lastLine = lines.length;
   if (tokens.length > 0 && !lastWasNewline) push('newline', '', lastLine, 1);

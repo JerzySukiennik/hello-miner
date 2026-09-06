@@ -1,4 +1,4 @@
-// Parser (tokens to AST) and compile-time name/gating checks for Hello, Miner.
+// Parser (tokens to AST) with depth caps (expr 150, blocks 50, 10 errors) and compile-time name/gating checks.
 
 import { LangError, unknownNameMessage, lockedMessage } from './errors.js';
 import { KEYWORDS } from './tokenizer.js';
@@ -13,6 +13,12 @@ export const CONSTANTS = ['up', 'down', 'left', 'right', 'stone', 'coal', 'iron'
 
 export const GATED_CONSTRUCTS = ['if', 'while', 'repeat', 'for', 'def', 'list', 'dict'];
 
+const MAX_EXPR_DEPTH = 150;
+const MAX_BLOCK_DEPTH = 50;
+const MAX_PARSE_ERRORS = 10;
+const TOO_COMPLEX = 'this line is too complicated for me. Try splitting it into smaller lines.';
+const TOO_NESTED = 'these blocks are nested too deeply. Try moving some of them into a function.';
+
 const BUILTIN_SET = new Set(BUILTINS);
 const CONSTANT_SET = new Set(CONSTANTS);
 const COMPARE_OPS = new Set(['==', '!=', '<', '<=', '>', '>=']);
@@ -22,6 +28,42 @@ class Parser {
   constructor(tokens) {
     this.toks = tokens.filter((t) => t.type !== 'comment');
     this.pos = 0;
+    this.depth = 0;
+    this.blockDepth = 0;
+    this.errors = [];
+  }
+
+  enter(tok) {
+    this.depth++;
+    if (this.depth > MAX_EXPR_DEPTH) this.fail(TOO_COMPLEX, tok);
+  }
+
+  exit(n = 1) {
+    this.depth -= n;
+  }
+
+  recover(before) {
+    if (this.pos <= before) this.next();
+    while (!this.at('eof') && !this.at('newline')) this.next();
+    if (this.at('newline')) this.next();
+  }
+
+  statementOrError(list) {
+    const before = this.pos;
+    const savedDepth = this.depth;
+    const savedBlockDepth = this.blockDepth;
+    try {
+      list.push(this.parseStatement());
+    } catch (e) {
+      if (!(e instanceof LangError) || this.errors.length >= MAX_PARSE_ERRORS - 1) {
+        if (e instanceof LangError) this.errors.push(e);
+        throw e;
+      }
+      this.errors.push(e);
+      this.depth = savedDepth;
+      this.blockDepth = savedBlockDepth;
+      this.recover(before);
+    }
   }
 
   peek(offset = 0) {
@@ -59,7 +101,7 @@ class Parser {
         this.next();
         continue;
       }
-      body.push(this.parseStatement());
+      this.statementOrError(body);
     }
     return { type: 'Program', body, line: 1, col: 1 };
   }
@@ -85,13 +127,26 @@ class Parser {
         }
         break;
       }
-      body.push(this.parseStatement());
+      this.statementOrError(body);
     }
     return body;
   }
 
   parseSuite() {
     this.expectOp(':', 'missing ":"');
+    this.blockDepth++;
+    if (this.blockDepth > MAX_BLOCK_DEPTH) {
+      this.blockDepth--;
+      this.fail(TOO_NESTED);
+    }
+    try {
+      return this.parseSuiteBody();
+    } finally {
+      this.blockDepth--;
+    }
+  }
+
+  parseSuiteBody() {
     if (this.at('newline')) {
       while (this.at('newline')) this.next();
       if (this.at('indent')) {
@@ -230,33 +285,46 @@ class Parser {
   }
 
   parseExpr() {
-    return this.parseOr();
+    this.enter();
+    const node = this.parseOr();
+    this.exit();
+    return node;
   }
 
   parseOr() {
     let left = this.parseAnd();
+    let n = 0;
     while (this.at('kw', 'or')) {
       const t = this.next();
+      this.enter(t);
+      n++;
       const right = this.parseAnd();
       left = { type: 'Logic', op: 'or', left, right, line: t.line, col: t.col };
     }
+    this.exit(n);
     return left;
   }
 
   parseAnd() {
     let left = this.parseNot();
+    let n = 0;
     while (this.at('kw', 'and')) {
       const t = this.next();
+      this.enter(t);
+      n++;
       const right = this.parseNot();
       left = { type: 'Logic', op: 'and', left, right, line: t.line, col: t.col };
     }
+    this.exit(n);
     return left;
   }
 
   parseNot() {
     if (this.at('kw', 'not')) {
       const t = this.next();
+      this.enter(t);
       const operand = this.parseNot();
+      this.exit();
       return { type: 'Unary', op: 'not', operand, line: t.line, col: t.col };
     }
     return this.parseComparison();
@@ -264,15 +332,20 @@ class Parser {
 
   parseComparison() {
     let left = this.parseAdd();
+    let n = 0;
     for (;;) {
       if (this.at('op') && COMPARE_OPS.has(this.peek().value)) {
         const t = this.next();
+        this.enter(t);
+        n++;
         const right = this.parseAdd();
         left = { type: 'Bin', op: t.value, left, right, line: t.line, col: t.col };
         continue;
       }
       if (this.at('kw', 'in')) {
         const t = this.next();
+        this.enter(t);
+        n++;
         const right = this.parseAdd();
         left = { type: 'Bin', op: 'in', left, right, line: t.line, col: t.col };
         continue;
@@ -280,6 +353,8 @@ class Parser {
       if (this.at('kw', 'not') && this.peek(1).type === 'kw' && this.peek(1).value === 'in') {
         const t = this.next();
         this.next();
+        this.enter(t);
+        n++;
         const right = this.parseAdd();
         left = {
           type: 'Unary',
@@ -290,34 +365,45 @@ class Parser {
         };
         continue;
       }
+      this.exit(n);
       return left;
     }
   }
 
   parseAdd() {
     let left = this.parseMul();
+    let n = 0;
     while (this.at('op', '+') || this.at('op', '-')) {
       const t = this.next();
+      this.enter(t);
+      n++;
       const right = this.parseMul();
       left = { type: 'Bin', op: t.value, left, right, line: t.line, col: t.col };
     }
+    this.exit(n);
     return left;
   }
 
   parseMul() {
     let left = this.parseUnary();
+    let n = 0;
     while (this.at('op', '*') || this.at('op', '/') || this.at('op', '//') || this.at('op', '%')) {
       const t = this.next();
+      this.enter(t);
+      n++;
       const right = this.parseUnary();
       left = { type: 'Bin', op: t.value, left, right, line: t.line, col: t.col };
     }
+    this.exit(n);
     return left;
   }
 
   parseUnary() {
     if (this.at('op', '-') || this.at('op', '+')) {
       const t = this.next();
+      this.enter(t);
       const operand = this.parseUnary();
+      this.exit();
       return { type: 'Unary', op: t.value, operand, line: t.line, col: t.col };
     }
     return this.parsePostfix();
@@ -325,9 +411,12 @@ class Parser {
 
   parsePostfix() {
     let node = this.parsePrimary();
+    let n = 0;
     for (;;) {
       if (this.at('op', '(')) {
         const t = this.next();
+        this.enter(t);
+        n++;
         const args = [];
         while (!this.at('op', ')')) {
           args.push(this.parseExpr());
@@ -343,11 +432,14 @@ class Parser {
       }
       if (this.at('op', '[')) {
         const t = this.next();
+        this.enter(t);
+        n++;
         const index = this.parseExpr();
         this.expectOp(']', 'missing "]"');
         node = { type: 'Index', obj: node, index, line: t.line, col: t.col };
         continue;
       }
+      this.exit(n);
       return node;
     }
   }
@@ -422,7 +514,19 @@ class Parser {
 }
 
 export function parse(tokens) {
-  return new Parser(tokens).parseProgram();
+  const parser = new Parser(tokens);
+  let program;
+  try {
+    program = parser.parseProgram();
+  } catch (e) {
+    if (e instanceof RangeError) {
+      const t = parser.peek();
+      throw new LangError(TOO_COMPLEX, t.line, t.col);
+    }
+    throw e;
+  }
+  program.errors = parser.errors;
+  return program;
 }
 
 function collectNames(stmts, out) {

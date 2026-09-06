@@ -346,6 +346,181 @@ async function main() {
     ok('wrong argument count is friendly', e instanceof LangError && /needs 1 thing/.test(e.raw), e && e.message);
   }
 
+  // --- allocation caps (no tab freeze) ---
+  function runtimeErrorTimed(src, api, budget) {
+    const t0 = process.hrtime.bigint();
+    const e = runtimeError(src, api);
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    return { error: e, ms, withinBudget: ms < budget };
+  }
+  {
+    const r = runtimeErrorTimed('x = [0] * 60000000', undefined, 50);
+    ok('huge list repeat is a LangError, not a freeze',
+      r.error instanceof LangError && /list would be too big \(max 10000 items\)/.test(r.error.raw),
+      r.error && r.error.message);
+    ok('huge list repeat fails in under 50 ms', r.withinBudget, `took ${r.ms.toFixed(2)} ms`);
+    ok('huge list repeat error points at line 1', r.error && r.error.line === 1, r.error && String(r.error.line));
+  }
+  {
+    const r = runtimeErrorTimed('x = "a" * 60000000', undefined, 50);
+    ok('huge string repeat is a LangError',
+      r.error instanceof LangError && /text would be too long \(max 10000 letters\)/.test(r.error.raw),
+      r.error && r.error.message);
+    ok('huge string repeat fails in under 50 ms', r.withinBudget, `took ${r.ms.toFixed(2)} ms`);
+  }
+  {
+    const r = runtimeErrorTimed('x = [0] * 9000\nx = x + x', undefined, 200);
+    ok('list concat over the cap is a LangError',
+      r.error instanceof LangError && /list would be too big/.test(r.error.raw), r.error && r.error.message);
+    ok('list concat error points at the concat line', r.error && r.error.line === 2, r.error && String(r.error.line));
+  }
+  {
+    const e = runtimeError('x = "a" * 9000\nx = x + x');
+    ok('string concat over the cap is a LangError',
+      e instanceof LangError && /text would be too long/.test(e.raw), e && e.message);
+  }
+  {
+    const e = runtimeError('x = "ab" * 9000\nx += x');
+    ok('"+=" on text is capped too', e instanceof LangError && /too long/.test(e.raw), e && e.message);
+  }
+  {
+    const e = runtimeError('x = [1] * 9000\nwhile True:\n    x = x + [1]');
+    ok('growing a list in a loop is capped', e instanceof LangError && /too big/.test(e.raw), e && e.message);
+  }
+  {
+    const e = runtimeError('d = {}\nrepeat(20000):\n    d[get_pos_x()] = 1', makeApi({ get_pos_x: (() => { let n = 0; return () => n++; })() }));
+    ok('growing a dict in a loop is capped', e instanceof LangError && /dict would be too big \(max 10000 keys\)/.test(e.raw), e && e.message);
+  }
+  {
+    const start = process.hrtime.bigint();
+    const src = 'a = [0] * 5000\n' + new Array(200).fill('b = a + a').join('\n');
+    const out = compile(src);
+    const runner = createRun(out.program, makeApi());
+    for (let i = 0; i < 1000; i++) if (runner.step().done) break;
+    const ms = Number(process.hrtime.bigint() - start) / 1e6;
+    ok('200 near-cap list copies stay inside one 50 ms tick budget', ms < 50, `took ${ms.toFixed(2)} ms`);
+  }
+  {
+    eq('lists just under the cap still work', printsOf('print(len([0] * 10000))'), ['10000']);
+    eq('text just under the cap still works', printsOf('print(len("a" * 10000))'), ['10000']);
+  }
+
+  // --- oversized programs stay LangErrors ---
+  {
+    const src = 'print(' + '('.repeat(1000) + '1' + ')'.repeat(1000) + ')';
+    let thrown = null;
+    let out = null;
+    try {
+      out = compile(src);
+    } catch (e) {
+      thrown = e;
+    }
+    ok('1000 nested parentheses do not throw out of compile', thrown === null, thrown && String(thrown));
+    ok('1000 nested parentheses give a LangError',
+      out && out.errors.length > 0 && out.errors[0] instanceof LangError, out && JSON.stringify(out.errors));
+    ok('nested parentheses error is child-readable and has a line',
+      out && /too complicated/.test(out.errors[0].raw) && out.errors[0].line === 1,
+      out && out.errors[0].message);
+  }
+  {
+    const src = 'print(' + new Array(5000).fill('1').join(' + ') + ')';
+    let thrown = null;
+    let out = null;
+    try {
+      out = compile(src);
+    } catch (e) {
+      thrown = e;
+    }
+    ok('5000 chained + do not throw out of compile', thrown === null, thrown && String(thrown));
+    ok('5000 chained + give a LangError with a line',
+      out && out.errors[0] instanceof LangError && out.errors[0].line === 1, out && JSON.stringify(out.errors));
+  }
+  {
+    const src = 'print(' + '('.repeat(50000) + '1' + ')'.repeat(50000) + ')';
+    let thrown = null;
+    let out = null;
+    try {
+      out = compile(src);
+    } catch (e) {
+      thrown = e;
+    }
+    ok('50000 nested parentheses still do not throw a raw RangeError', thrown === null, thrown && String(thrown));
+    ok('50000 nested parentheses give a LangError', out && out.errors[0] instanceof LangError);
+  }
+  {
+    let src = '';
+    for (let i = 0; i < 300; i++) src += ' '.repeat(i * 2) + 'if True:\n';
+    src += ' '.repeat(600) + 'mine()\n';
+    const out = compile(src);
+    ok('300 nested blocks give a LangError, not a RangeError',
+      out.errors[0] instanceof LangError && /nested too deeply/.test(out.errors[0].raw), JSON.stringify(out.errors));
+  }
+  {
+    const out = compile('x = 1\n' + 'x = [' + new Array(3000).fill('1').join(', ') + ']\nprint(len(x))');
+    ok('a wide list literal still compiles', out.errors.length === 0, JSON.stringify(out.errors));
+  }
+  {
+    const deep = compile('print(' + '('.repeat(100) + '1' + ')'.repeat(100) + ')');
+    ok('100 nested parentheses are still allowed', deep.errors.length === 0, JSON.stringify(deep.errors));
+  }
+
+  // --- unclosed brackets are reported on their own line ---
+  {
+    const e = firstError('mine()\nprint(1\nrepeat(2):\n    mine()');
+    ok('unclosed "(" is reported on the line that opened it',
+      e instanceof LangError && e.line === 2, e && e.message);
+    ok('unclosed "(" says what is missing', e && e.raw === 'missing ")"', e && e.raw);
+  }
+  {
+    const e = firstError('mine()\nprint(1');
+    ok('unclosed "(" at the end of the program points at line 2', e && e.line === 2, e && e.message);
+  }
+  {
+    const e = firstError('mine()\nmine()\nx = [1, 2\nwhile True:\n    mine()');
+    ok('unclosed "[" is reported on line 3 with the right bracket',
+      e && e.line === 3 && e.raw === 'missing "]"', e && e.message);
+  }
+  {
+    const e = firstError('if True:\n    print(1\nelse:\n    mine()');
+    ok('unclosed "(" before an else points at line 2', e && e.line === 2 && e.raw === 'missing ")"', e && e.message);
+  }
+  {
+    const e = firstError('x = {"a": 1\nreturn x');
+    ok('unclosed "{" points at line 1', e && e.line === 1 && e.raw === 'missing "}"', e && e.message);
+  }
+  {
+    const out = compile('x = [1,\n     2,\n     3]\nprint(len(x))');
+    ok('a genuine multi-line list still compiles', out.errors.length === 0, JSON.stringify(out.errors));
+    eq('a genuine multi-line list still runs', printsOf('x = [1,\n     2,\n     3]\nprint(len(x))'), ['3']);
+  }
+  {
+    const out = compile('print(1 +\n      2)');
+    ok('a multi-line expression still compiles', out.errors.length === 0, JSON.stringify(out.errors));
+  }
+  {
+    const out = compile('x = [1,\n     True,\n     None]\nprint(len(x))');
+    ok('keywords that are not statement starters do not end a bracket', out.errors.length === 0, JSON.stringify(out.errors));
+  }
+
+  // --- several independent parse errors ---
+  {
+    const out = compile('print(1 +)\n1 = 2\nmine()');
+    ok('two independent parse errors are both reported', out.errors.length === 2, JSON.stringify(out.errors.map((e) => e.message)));
+    ok('the reported parse errors keep their own lines',
+      out.errors[0].line === 1 && out.errors[1].line === 2, JSON.stringify(out.errors.map((e) => e.message)));
+    ok('a program with parse errors compiles to no program', out.program === null);
+  }
+  {
+    const out = compile('if True:\n    print(1 +)\n    1 = 2\nmine()');
+    ok('parse errors inside a block are both reported', out.errors.length === 2, JSON.stringify(out.errors.map((e) => e.message)));
+  }
+  {
+    let src = '';
+    for (let i = 0; i < 40; i++) src += '1 = 2\n';
+    const out = compile(src);
+    ok('the number of reported parse errors is capped', out.errors.length <= 10, String(out.errors.length));
+  }
+
   // --- runner line tracking ---
   {
     const out = compile('print(1)\nmine()\nprint(2)');

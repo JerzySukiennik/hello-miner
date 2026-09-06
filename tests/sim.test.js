@@ -184,6 +184,106 @@
     eq(t.hp, 0, 'cleared boulder has no hp left');
   }
 
+  // --- mine() prefers the faced boulder over the ore under the drone --------
+  {
+    const w = newWorld();
+    w.addPlayer('p1', 'amber');
+    w.growGrid();
+    for (const tile of w.tiles) {
+      tile.kind = 'rock'; tile.hp = 0; tile.ore = 'stone'; tile.stage = 1; tile.stock = 1;
+    }
+    const t = w.tiles[w.tileIndex(1, 0)];
+    t.kind = 'boulder'; t.hp = 3; t.ore = 'none'; t.stage = 0; t.stock = 0;
+    const d = w.drones['p1:1'];
+    eq(d.x + ',' + d.y, '0,0', 'the drone starts on the stone tile at (0,0)');
+    w.runProgram('p1', prog([
+      { op: 'move', dir: 'right' }, { op: 'mine' },
+      { op: 'move', dir: 'right' }, { op: 'mine' },
+      { op: 'move', dir: 'right' }, { op: 'mine' },
+      { op: 'move', dir: 'right' }, { op: 'mine' },
+    ]));
+    let cleared = false;
+    let leftEarly = false;
+    w.on('mined', (e) => { if (e.boulder && e.cleared) cleared = true; });
+    ticks(w, 40, () => { if (!cleared && (d.x !== 0 || d.y !== 0)) leftEarly = true; });
+    eq(t.kind, 'rock', 'a boulder next to a drone standing on ore still clears in 3 mines');
+    eq(t.hp, 0, 'the cleared boulder has no hp left');
+    ok(!leftEarly, 'the drone stayed on its stone tile until the boulder was gone');
+    eq(d.x + ',' + d.y, '1,0', 'once cleared, the fourth move walks onto the old boulder tile');
+    eq(w.tiles[w.tileIndex(0, 0)].ore, 'stone', 'the tile the drone stood on kept its ore while the boulder was cleared');
+  }
+
+  {
+    const w = newWorld();
+    w.addPlayer('p1', 'amber');
+    w.growGrid();
+    for (const tile of w.tiles) {
+      tile.kind = 'rock'; tile.hp = 0; tile.ore = 'stone'; tile.stage = 1; tile.stock = 1;
+    }
+    const t = w.tiles[w.tileIndex(1, 0)];
+    t.kind = 'boulder'; t.hp = 3; t.ore = 'none'; t.stage = 0; t.stock = 0;
+    const home = w.tiles[w.tileIndex(0, 0)];
+    home.ore = 'none'; home.stage = 0; home.stock = 0;
+    w.runProgram('p1', prog([
+      { op: 'move', dir: 'right' }, { op: 'mine' },
+      { op: 'move', dir: 'right' }, { op: 'mine' },
+      { op: 'move', dir: 'right' }, { op: 'mine' },
+    ]));
+    ticks(w, 40);
+    eq(t.kind, 'rock', 'the same boulder still clears in 3 mines from an emptied tile');
+    eq(w.inv.stone, 0, 'clearing a boulder never adds ore to the inventory');
+  }
+
+  {
+    const w = newWorld();
+    w.addPlayer('p1', 'amber');
+    w.growGrid();
+    const t = w.tiles[w.tileIndex(1, 0)];
+    t.kind = 'boulder'; t.hp = 3; t.ore = 'none';
+    const d = w.drones['p1:1'];
+    d.dir = 'right';
+    const sensed = [];
+    w.runProgram('p1', prog([sense(sensed, (api) => api.can_mine())]));
+    ticks(w, 2);
+    eq(sensed[0], true, 'can_mine is True when the drone faces a boulder');
+  }
+
+  // --- in-flight moves survive the grid growing -----------------------------
+  {
+    const w = newWorld();
+    w.addPlayer('p1', 'amber');
+    w.growGrid();
+    const d = w.drones['p1:1'];
+    d.x = 1; d.y = 1;
+    w.runProgram('p1', prog([{ op: 'move', dir: 'right' }]));
+    ticks(w, 1);
+    eq(d.action.tx, 0, 'on a 2x2 grid a right move from x 1 targets the wrapped x 0');
+    w.growGrid();
+    eq(w.size, 3, 'the grid grew to 3x3 mid-move');
+    eq(d.action.tx, 2, 'the in-flight move is retargeted to the new neighbour x 2');
+    eq(d.action.ty, 1, 'retargeting keeps y');
+    ticks(w, 10);
+    eq(d.x, 2, 'the drone lands on x 2, not on the pre-growth wrapped tile');
+    eq(d.y, 1, 'the drone lands on the same row');
+  }
+
+  {
+    const w = newWorld(2);
+    w.addPlayer('p1', 'amber');
+    w.growGrid();
+    const d = w.drones['p1:1'];
+    d.x = 1; d.y = 1;
+    w.runProgram('p1', prog([{ op: 'move', dir: 'right' }]));
+    ticks(w, 1);
+    w.growGrid();
+    eq(w.tiles[w.tileIndex(2, 1)].kind, 'boulder', 'seed 2 grows a boulder right of the moving drone');
+    eq(d.action, null, 'a move retargeted onto a fresh boulder is cancelled');
+    eq(d.x, 1, 'the cancelled move leaves the drone on its origin tile x');
+    eq(d.y, 1, 'the cancelled move leaves the drone on its origin tile y');
+    ticks(w, 10);
+    eq(d.x + ',' + d.y, '1,1', 'the drone stays put after the cancelled move');
+  }
+
   // --- non-overlap and the 2000 ms give-up ---------------------------------
   {
     const w = newWorld();

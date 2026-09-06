@@ -214,6 +214,50 @@
     eq(a.x + ',' + a.y, '0,0', 'f) the blocked drone never moved');
   }
 
+  // --- g) clearing a boulder while standing on ore ---------------------------
+  {
+    const w = newWorld(6);
+    w.addPlayer('p1', 'amber');
+    unlock(w, ['repeat']);
+    w.growGrid();
+    plantStone(w);
+    const t = w.tiles[w.tileIndex(1, 0)];
+    t.kind = 'boulder'; t.hp = 3; t.ore = 'none'; t.stage = 0; t.stock = 0;
+    const d = w.drones['p1:1'];
+    eq(d.x + ',' + d.y, '0,0', 'g) the drone starts on a ready stone tile');
+    const errs = [];
+    w.on('error', (e) => errs.push(e));
+    w.runProgram('p1', build('repeat(3):\n    move(right)\n    mine()', w));
+    ticks(w, 40);
+    eq(t.kind, 'rock', 'g) three mines clear the boulder even though the drone stands on ore');
+    eq(t.hp, 0, 'g) the cleared boulder has no hp left');
+    eq(w.inv.stone, 0, 'g) clearing a boulder yields no ore');
+    eq(errs.length, 0, 'g) no error events while clearing the boulder');
+    eq(d.state === 'error', false, 'g) the drone is not in the error state');
+  }
+
+  // --- h) the grid grows while a drone is mid-move ---------------------------
+  {
+    const w = newWorld(7);
+    w.addPlayer('p1', 'amber');
+    unlock(w, ['print', 'get_pos_x', 'get_pos_y']);
+    w.growGrid();
+    plantStone(w);
+    const d = w.drones['p1:1'];
+    d.x = 1; d.y = 1;
+    const prints = [];
+    w.on('print', (e) => prints.push(e.text));
+    w.runProgram('p1', build('move(right)\nprint(get_pos_x())\nprint(get_pos_y())', w));
+    ticks(w, 2);
+    ok(d.action && d.action.op === 'move', 'h) the drone is mid-move on the 2x2 grid');
+    w.growGrid();
+    eq(w.size, 3, 'h) the island grew to 3x3 mid-move');
+    ticks(w, 12);
+    eq(prints[0], '2', 'h) a move that started before the growth lands on the new neighbour x 2');
+    eq(prints[1], '1', 'h) and keeps its row');
+    eq(d.x, 2, 'h) the drone position agrees with what the program read');
+  }
+
   console.log('');
   console.log(passed + ' assertions passed, ' + failures.length + ' failed');
   if (failures.length) {

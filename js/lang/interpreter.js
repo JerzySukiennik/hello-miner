@@ -1,4 +1,4 @@
-// Generator-based interpreter: every loop iteration and user function call yields a tick.
+// Generator-based interpreter: every loop/call yields a tick; caps are 10000 list items, 10000 text letters, 10000 dict keys, 100000 range steps, 100 call depth, so no single statement can block the 50 ms sim tick.
 
 import { LangError, unknownNameMessage } from './errors.js';
 import { BUILTINS, CONSTANTS } from './parser.js';
@@ -8,7 +8,14 @@ const CONSTANT_SET = new Set(CONSTANTS);
 const DIR_NAMES = new Set(['up', 'down', 'left', 'right']);
 const ORE_NAMES = new Set(['stone', 'coal', 'iron', 'gold', 'crystal', 'none']);
 const MAX_RANGE = 100000;
+const MAX_LIST = 10000;
+const MAX_TEXT = 10000;
+const MAX_DICT = 10000;
 const DEFAULT_MAX_DEPTH = 100;
+
+const tooBigList = (node) => err(`that list would be too big (max ${MAX_LIST} items)`, node);
+const tooBigText = (node) => err(`that text would be too long (max ${MAX_TEXT} letters)`, node);
+const tooBigDict = (node) => err(`that dict would be too big (max ${MAX_DICT} keys)`, node);
 
 const BREAK = { signal: 'break' };
 const CONTINUE = { signal: 'continue' };
@@ -58,6 +65,11 @@ function isList(v) {
 
 function isDict(v) {
   return v instanceof Map;
+}
+
+function isPrimitiveKey(v) {
+  const t = typeof v;
+  return v === null || t === 'number' || t === 'string' || t === 'boolean';
 }
 
 export function truthy(v) {
@@ -133,20 +145,34 @@ function binary(op, a, b, node) {
   switch (op) {
     case '+':
       if (typeof a === 'number' && typeof b === 'number') return a + b;
-      if (typeof a === 'string' && typeof b === 'string') return a + b;
-      if (isList(a) && isList(b)) return a.concat(b);
+      if (typeof a === 'string' && typeof b === 'string') {
+        if (a.length + b.length > MAX_TEXT) throw tooBigText(node);
+        return a + b;
+      }
+      if (isList(a) && isList(b)) {
+        if (a.length + b.length > MAX_LIST) throw tooBigList(node);
+        return a.concat(b);
+      }
       throw err(`I cannot add ${typeName(a)} and ${typeName(b)}.`, node);
     case '-':
       return num(a, node, '"-"') - num(b, node, '"-"');
-    case '*':
-      if (typeof a === 'string' && typeof b === 'number') return a.repeat(Math.max(0, Math.trunc(b)));
-      if (typeof a === 'number' && typeof b === 'string') return b.repeat(Math.max(0, Math.trunc(a)));
-      if (isList(a) && typeof b === 'number') {
+    case '*': {
+      const text = typeof a === 'string' ? a : typeof b === 'string' ? b : null;
+      if (text !== null && (typeof a === 'number' || typeof b === 'number')) {
+        const times = Math.max(0, Math.trunc(typeof a === 'number' ? a : b));
+        if (text.length * times > MAX_TEXT) throw tooBigText(node);
+        return text.repeat(times);
+      }
+      const list = isList(a) ? a : isList(b) ? b : null;
+      if (list !== null && (typeof a === 'number' || typeof b === 'number')) {
+        const times = Math.max(0, Math.trunc(typeof a === 'number' ? a : b));
+        if (list.length * times > MAX_LIST) throw tooBigList(node);
         const out = [];
-        for (let i = 0; i < Math.max(0, Math.trunc(b)); i++) out.push(...a);
+        for (let i = 0; i < times; i++) out.push(...list);
         return out;
       }
       return num(a, node, '"*"') * num(b, node, '"*"');
+    }
     case '/': {
       const d = num(b, node, '"/"');
       if (d === 0) throw err('I cannot divide by zero.', node);
@@ -190,6 +216,7 @@ function binary(op, a, b, node) {
         return b.indexOf(a) !== -1;
       }
       if (isDict(b)) {
+        if (isPrimitiveKey(a)) return b.has(a);
         for (const k of b.keys()) if (equals(k, a)) return true;
         return false;
       }
@@ -214,6 +241,10 @@ function getIndex(obj, key, node) {
     return typeof obj === 'string' ? obj[i] : obj[i];
   }
   if (isDict(obj)) {
+    if (isPrimitiveKey(key)) {
+      if (obj.has(key)) return obj.get(key);
+      throw err(`That dict has no key ${repr(key)}.`, node);
+    }
     for (const [k, v] of obj) if (equals(k, key)) return v;
     throw err(`That dict has no key ${repr(key)}.`, node);
   }
@@ -231,12 +262,18 @@ function setIndex(obj, key, value, node) {
     return;
   }
   if (isDict(obj)) {
+    if (isPrimitiveKey(key)) {
+      if (!obj.has(key) && obj.size >= MAX_DICT) throw tooBigDict(node);
+      obj.set(key, value);
+      return;
+    }
     for (const k of obj.keys()) {
       if (equals(k, key)) {
         obj.set(k, value);
         return;
       }
     }
+    if (obj.size >= MAX_DICT) throw tooBigDict(node);
     obj.set(key, value);
     return;
   }
@@ -462,11 +499,13 @@ function* evalExpr(node, env, ctx) {
       throw err(unknownNameMessage(node.name, known), node);
     }
     case 'List': {
+      if (node.items.length > MAX_LIST) throw tooBigList(node);
       const out = [];
       for (const item of node.items) out.push(yield* evalExpr(item, env, ctx));
       return out;
     }
     case 'Dict': {
+      if (node.pairs.length > MAX_DICT) throw tooBigDict(node);
       const m = new Map();
       for (const [k, v] of node.pairs) {
         const key = yield* evalExpr(k, env, ctx);
