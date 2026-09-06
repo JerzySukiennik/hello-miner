@@ -214,11 +214,55 @@ function onSnapshot(snap) {
   }
 }
 
+/* ---------- attract mode: a live mine behind the lobby ---------- */
+
+let attract = null;
+
+function startAttract() {
+  if (attract || room) return;
+  const w = createWorld({ seed: 'menu', lang });
+  const cast = [
+    { id: 'a', color: COLORS[0].hex, src: 'while True:\n    mine()\n    move(right)\n' },
+    { id: 'b', color: COLORS[1].hex, src: 'while True:\n    move(up)\n    mine()\n    move(right)\n' },
+    { id: 'c', color: COLORS[4].hex, src: 'while True:\n    move(left)\n    mine()\n' },
+  ];
+  for (const c of cast) w.addPlayer(c.id, c.color);
+  for (const id of ['grid', 'grid', 'grid', 'loops', 'vars', 'sensors']) {
+    try { w.inv.stone += 4000; w.inv.coal += 400; w.inv.iron += 200; w.buy(id); } catch (e) { /* optional */ }
+  }
+  for (const c of cast) {
+    const out = lang.compile(c.src, {});
+    if (!out.errors.length) { try { w.runProgram(c.id, out.program); } catch (e) { /* skip */ } }
+  }
+  const players = {};
+  for (const c of cast) players[c.id] = { nick: '', color: c.color };
+  renderer.setPlayers(players);
+  attract = { world: w, acc: 0, last: performance.now() };
+}
+
+function stopAttract() {
+  attract = null;
+}
+
+function pumpAttract(now) {
+  if (!attract || room) return;
+  const dt = Math.min(250, now - attract.last);
+  attract.last = now;
+  attract.acc += dt;
+  let guard = 0;
+  while (attract.acc >= TICK_MS && guard++ < 12) {
+    attract.world.tick(TICK_MS);
+    attract.acc -= TICK_MS;
+  }
+  renderer.setSnapshot(attract.world.snapshot(), now);
+}
+
 let lastRafAt = performance.now();
 
 function frame(now) {
   requestAnimationFrame(frame);
   lastRafAt = now;
+  pumpAttract(now);
   pumpSim(now);
   renderer.frame(now);
 }
@@ -270,6 +314,8 @@ function resolveColorClash(players) {
 
 function wireRoom(created) {
   room = created;
+  stopAttract();
+  document.body.classList.remove('in-lobby');
   ui.bindRoom(room);
   ui.hideLobby();
   renderer.setPlayers(room.players);
@@ -411,4 +457,7 @@ window.addEventListener('beforeunload', () => {
   if (room) { try { room.leave(); } catch (e) { /* closing anyway */ } }
 });
 
-window.__hm = { get room() { return room; }, get world() { return world; }, get snap() { return lastSnap; }, renderer, ui, audio, lang };
+document.body.classList.add('in-lobby');
+startAttract();
+
+window.__hm = { get room() { return room; }, get world() { return world; }, get snap() { return lastSnap; }, get attract() { return attract; }, renderer, ui, audio, lang };

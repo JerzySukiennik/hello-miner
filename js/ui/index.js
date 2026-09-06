@@ -139,8 +139,8 @@ export function createUI(opts) {
       listeners.get(name).push(fn);
       return ui;
     },
-    showLobby() { lobby.show(); },
-    hideLobby() { lobby.hide(); },
+    showLobby() { el.classList.add('lobby-open'); lobby.show(); },
+    hideLobby() { el.classList.remove('lobby-open'); lobby.hide(); },
     lobbyError(msg) { lobby.error(msg); },
     toast(text, kind) { toasts.push(text, kind); },
     openWindow(id) { wins.open(id); },
@@ -197,6 +197,7 @@ export function createUI(opts) {
     destroy() { el.remove(); },
   };
 
+  el.classList.add('lobby-open');
   lobby.show();
   return ui;
 }

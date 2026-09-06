@@ -71,3 +71,12 @@ body { touch-action: none; }
 @media (prefers-reduced-motion: reduce) {
   #mute { transition-duration: .01ms; }
 }
+
+body.in-lobby #scene {
+  filter: blur(7px) saturate(.82) brightness(.72);
+  transform: scale(1.06);
+  transition: filter .5s var(--ease, ease), transform .5s var(--ease, ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  body.in-lobby #scene { transition: none; }
+}
