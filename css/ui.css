@@ -355,12 +355,13 @@
 .ed-hl { overflow: hidden; pointer-events: none; color: var(--fg); }
 .ed-hl-in { will-change: transform; }
 .ed-cursors { overflow: hidden; pointer-events: none; padding: 0; }
-.ed-ta {
-  overflow: auto; resize: none; background: transparent; color: transparent;
+.hm-ui .ed-ta {
+  overflow: auto; resize: none; background: transparent;
+  color: transparent; -webkit-text-fill-color: transparent;
   caret-color: var(--fg); outline: none;
 }
-.ed-ta::selection { background: rgba(143, 217, 230, .28); }
-.ed-ta:focus-visible { outline: none; }
+.hm-ui .ed-ta::selection { background: rgba(143, 217, 230, .28); -webkit-text-fill-color: transparent; }
+.hm-ui .ed-ta:focus-visible { outline: none; }
 .ed-hl .t-kw { color: #ffb454; }
 .ed-hl .t-bi { color: #7fd4e8; }
 .ed-hl .t-str { color: #b8d94a; }

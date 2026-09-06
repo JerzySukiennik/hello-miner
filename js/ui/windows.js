@@ -27,6 +27,33 @@ export function createWindows(opts) {
   const wins = new Map();
   let z = 100;
   let cascade = 0;
+  let layout = null;
+  let applying = false;
+
+  function publish(w) {
+    if (!layout || applying) return;
+    layout.set(w.id, {
+      x: Math.round(w.x), y: Math.round(w.y),
+      w: Math.round(w.el.offsetWidth), h: Math.round(w.el.offsetHeight),
+      min: !!w.minimised,
+    });
+  }
+
+  function applyLayout(id, v) {
+    const w = wins.get(id);
+    if (!w || !v || w.dragging) return;
+    applying = true;
+    w.moved = true;
+    if (typeof v.w === 'number') w.el.style.width = Math.max(MIN_W, v.w) + 'px';
+    if (typeof v.h === 'number') w.el.style.height = Math.max(MIN_H, v.h) + 'px';
+    if (typeof v.x === 'number') w.x = v.x;
+    if (typeof v.y === 'number') w.y = v.y;
+    clamp(w);
+    if (v.min && !w.minimised) minimise(w, true);
+    else if (!v.min && w.minimised) restore(w, true);
+    w.editor.refresh();
+    applying = false;
+  }
 
   function viewport() {
     return {
@@ -78,6 +105,7 @@ export function createWindows(opts) {
       try { handle.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
       focus(w);
       w.moved = true;
+      w.dragging = true;
       const sx = e.clientX;
       const sy = e.clientY;
       const ox = w.x;
@@ -89,13 +117,17 @@ export function createWindows(opts) {
           w.x = ox + (ev.clientX - sx);
           w.y = oy + (ev.clientY - sy);
           clamp(w);
+          publish(w);
         } else {
           w.el.style.width = Math.max(MIN_W, ow + (ev.clientX - sx)) + 'px';
           w.el.style.height = Math.max(MIN_H, oh + (ev.clientY - sy)) + 'px';
           w.editor.refresh();
+          publish(w);
         }
       };
       const up = () => {
+        w.dragging = false;
+        publish(w);
         handle.removeEventListener('pointermove', move);
         handle.removeEventListener('pointerup', up);
         handle.removeEventListener('pointercancel', up);
@@ -153,10 +185,11 @@ export function createWindows(opts) {
     editor.mounted();
     wins.set(id, w);
     setPlayer(id, w.player);
+    if (layout && layout.has(id)) applyLayout(id, layout.get(id)); else publish(w);
     return w;
   }
 
-  function minimise(w) {
+  function minimise(w, quiet) {
     w.minimised = true;
     w.el.hidden = true;
     const chip = document.createElement('button');
@@ -167,14 +200,16 @@ export function createWindows(opts) {
     chip.addEventListener('click', () => restore(w));
     dock.appendChild(chip);
     w.chip = chip;
+    if (!quiet) publish(w);
   }
 
-  function restore(w) {
+  function restore(w, quiet) {
     w.minimised = false;
     w.el.hidden = false;
     if (w.chip) { w.chip.remove(); w.chip = null; }
     focus(w);
     w.editor.refresh();
+    if (!quiet) publish(w);
   }
 
   function setPlayer(id, player) {
@@ -199,6 +234,15 @@ export function createWindows(opts) {
 
   return {
     el: layer,
+    bindLayout(map) {
+      layout = map;
+      if (!layout) return;
+      for (const [id, v] of layout.entries()) applyLayout(id, v);
+      layout.observe((ev) => {
+        for (const key of ev.keysChanged) applyLayout(key, layout.get(key));
+      });
+      for (const w of wins.values()) if (!layout.has(w.id)) publish(w);
+    },
     has: (id) => wins.has(id),
     get: (id) => wins.get(id),
     ids: () => [...wins.keys()],

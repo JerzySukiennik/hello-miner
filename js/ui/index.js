@@ -35,6 +35,7 @@ export function createUI(opts) {
   let players = {};
   let allowed = new Set(BASE_ALLOWED);
   const bound = new Set();
+  let sawBoulder = false;
   const running = new Set();
 
   const toasts = createToasts();
@@ -168,6 +169,10 @@ export function createUI(opts) {
       const prevAllowed = allowed;
       allowed = new Set([...BASE_ALLOWED, ...unlocked]);
       hud.setInv(snap.inv, unlocked);
+      if (!sawBoulder && (snap.tiles || []).some((t) => t && t.kind === 'boulder')) {
+        sawBoulder = true;
+        lesson.show('boulder');
+      }
       tree.update(snap);
       docs.setAllowed(allowed);
       if (prevAllowed.size !== allowed.size) {
@@ -195,6 +200,7 @@ export function createUI(opts) {
       hud.setCode(room.code);
       ui.setPlayers(room.players);
       for (const id of wins.ids()) bindDoc(id);
+      try { if (room.doc) wins.bindLayout(room.doc.getMap('winLayout')); } catch (e) { /* offline */ }
       if (typeof room.on === 'function') {
         room.on('players', (p) => ui.setPlayers(p || room.players));
         room.on('awareness', refreshCursors);

@@ -50,6 +50,22 @@ export const INTRO = {
 };
 
 export const LESSONS = {
+  boulder: {
+    en: {
+      deep: 'A boulder is not ore and never ripens — it is a wall with three hit points. move() into it fails immediately and returns False, but the drone still turns to face it, and that is what lets the next mine() land on the boulder instead of the ground.',
+      title: 'A boulder is in the way',
+      body: 'That big grey rock blocks the tile. Flying into it does nothing, so break it first: aim at it with a move, then mine three times.',
+      code: 'move(right)\nmine()\nmine()\nmine()\nmove(right)',
+      note: 'While you face a boulder, can_mine() is True and mine() hits the rock rather than the ore under the drone.',
+    },
+    pl: {
+      deep: 'Głaz nie jest rudą i nigdy nie dojrzewa — to ściana z trzema punktami wytrzymałości. move() w jego stronę od razu zawodzi i zwraca False, ale dron i tak obraca się w jego kierunku, i właśnie dzięki temu kolejne mine() trafia w głaz, a nie w ziemię.',
+      title: 'Głaz blokuje drogę',
+      body: 'Ten duży szary kamień blokuje pole. Wlecenie w niego nic nie da, więc najpierw go rozbij: wyceluj ruchem, potem kop trzy razy.',
+      code: 'move(right)\nmine()\nmine()\nmine()\nmove(right)',
+      note: 'Kiedy patrzysz na głaz, can_mine() jest prawdą, a mine() uderza w skałę zamiast w rudę pod dronem.',
+    },
+  },
   grid: {
     en: { deep: 'Under the hood the island is a grid of numbered tiles. move() changes which tile the drone is on, and nothing else — it does not mine, and it does not care what is there.', title: 'Bigger island', body: 'The island grew. More tiles means more ore, but your drone has to reach them.\n\nMoving takes a direction:', code: 'move(right)\nmine()', note: 'The four directions are up, down, left and right. Fly off one edge and you come back on the opposite one.' },
     pl: { deep: 'Pod spodem wyspa to siatka ponumerowanych pól. move() zmienia tylko to, na którym polu stoi dron — nie kopie i nie sprawdza, co tam jest.', title: 'Większa wyspa', body: 'Wyspa urosła. Więcej pól to więcej rudy, ale dron musi do nich dolecieć.\n\nRuch wymaga kierunku:', code: 'move(right)\nmine()', note: 'Kierunki to up, down, left i right. Wylecisz za jedną krawędź, wrócisz z przeciwnej.' },
