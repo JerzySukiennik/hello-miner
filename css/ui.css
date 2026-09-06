@@ -512,73 +512,76 @@
 .hm-ui.tree-open .dock { display: none !important; }
 body.tree-open #scene { visibility: hidden; }
 
-/* ---------- Lesson card ---------- */
+/* ---------- Lesson note: a floating window like a code window ---------- */
 
-.lesson {
-  position: absolute; inset: 0; z-index: 12000; pointer-events: auto;
-  display: grid; place-items: center;
-  background: rgba(10, 11, 14, .62);
-  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
-  animation: fade .18s var(--ease);
+.note {
+  position: absolute; display: flex; flex-direction: column;
+  overflow: hidden; pointer-events: auto; z-index: 9000;
+  animation: note-in .26s var(--ease) both;
 }
-.lesson[hidden] { display: none; }
+.note[hidden] { display: none; }
+@keyframes note-in { from { opacity: 0; transform: translateY(10px) scale(.99); } to { opacity: 1; transform: none; } }
 
-.lesson-card {
-  width: min(560px, calc(100vw - 40px));
-  max-height: calc(100vh - 60px); overflow: auto;
-  padding: 26px 30px 22px;
-  background: var(--panel-solid);
-  border: 1px solid var(--line-2); border-radius: 14px;
-  box-shadow: 0 30px 70px rgba(0, 0, 0, .5);
-  animation: lesson-in .3s var(--ease) both;
+.note-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 8px 8px 14px; cursor: grab; flex: 0 0 auto;
+  background: rgba(242, 201, 76, .12);
+  border-bottom: 1px solid var(--line);
 }
-@keyframes lesson-in { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
-
-.lesson-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.lesson-kicker {
-  flex: 1; font-size: 10px; letter-spacing: .24em; text-transform: uppercase; color: var(--gold);
+.note-head:active { cursor: grabbing; }
+.note-title {
+  flex: 1; font-size: 12px; font-weight: 600; color: var(--fg);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.lesson-langs { display: flex; gap: 4px; }
-.lesson-lang {
-  pointer-events: auto; padding: 4px 9px; border-radius: 6px;
+.note-langs { display: flex; gap: 3px; }
+.note-lang {
+  pointer-events: auto; padding: 3px 7px; border-radius: 5px;
   background: none; border: 1px solid var(--line); color: var(--fg-faint);
-  font-family: var(--display); font-size: 10px; letter-spacing: .12em; cursor: pointer;
+  font-family: var(--display); font-size: 9px; letter-spacing: .1em; cursor: pointer;
   transition: color .18s var(--ease), border-color .18s var(--ease);
 }
-.lesson-lang[aria-pressed="true"] { color: var(--fg); border-color: var(--line-2); }
-.lesson-lang:hover { color: var(--fg); }
-
-.lesson-title { margin: 0 0 14px; font-size: 22px; font-weight: 600; line-height: 1.2; }
-.lesson-body p { margin: 0 0 13px; font-size: 14px; line-height: 1.62; color: var(--fg); }
-.lesson-body p.lesson-note { font-size: 13px; color: var(--fg-dim); margin-bottom: 4px; }
-
-.lesson-deep-label {
-  font-size: 10px; letter-spacing: .22em; text-transform: uppercase;
-  color: var(--fg-faint); margin-bottom: 10px;
+.note-lang[aria-pressed="true"] { color: var(--fg); border-color: var(--line-2); }
+.note-lang:hover { color: var(--fg); }
+.note-head .icon-btn {
+  width: 22px; height: 22px; font-size: 15px; line-height: 1;
+  display: grid; place-items: center; border-radius: 5px;
+  background: none; border: 0; color: var(--fg-dim); cursor: pointer;
 }
+.note-head .icon-btn:hover { background: rgba(0, 0, 0, .3); color: var(--fg); }
 
-.lesson-tryit {
-  font-size: 10px; letter-spacing: .2em; text-transform: uppercase;
-  color: var(--fg-faint); margin: 16px 0 7px;
+.note-body {
+  flex: 1; min-height: 0; overflow: auto;
+  padding: 16px 18px; background: rgba(20, 22, 27, .94);
 }
-.lesson-code {
-  margin: 0 0 15px; padding: 14px 16px;
+.note-body p { margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: var(--fg); }
+.note-body p.note-aside { font-size: 12px; color: var(--fg-dim); }
+.note-label {
+  font-size: 9px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--fg-faint); margin: 4px 0 7px;
+}
+.note-code {
+  margin: 0 0 13px; padding: 11px 13px;
   background: #14161b; border: 1px solid var(--line);
-  border-left: 3px solid var(--gold); border-radius: 8px;
-  font-family: var(--mono); font-size: 13px; line-height: 1.65;
-  white-space: pre; overflow-x: auto;
+  border-left: 3px solid var(--gold); border-radius: 7px;
+  font-family: var(--mono); font-size: 12px; line-height: 1.6;
+  color: #e8eaef; white-space: pre; overflow-x: auto;
 }
-.lesson-code-line { color: #e8eaef; }
 
-.lesson-foot { display: flex; align-items: center; gap: 14px; margin-top: 20px; }
-.lesson-dots { flex: 1; display: flex; gap: 6px; }
-.lesson-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); }
-.lesson-dot.is-on { background: var(--gold); }
-.lesson-next { padding: 10px 26px; }
-
-body.lesson-open #scene { filter: blur(4px) brightness(.8); }
-
-@media (prefers-reduced-motion: reduce) {
-  .lesson, .lesson-card { animation: none; }
-  body.lesson-open #scene { filter: brightness(.8); }
+.note-foot {
+  display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
+  padding: 9px 12px; border-top: 1px solid var(--line);
+  background: rgba(0, 0, 0, .18);
 }
+.note-dots { flex: 1; display: flex; gap: 5px; }
+.note-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--line-2); }
+.note-dot.is-on { background: var(--gold); }
+.note-foot .btn { padding: 6px 16px; font-size: 12px; }
+.note-prev[hidden] { display: none; }
+
+.note-grip {
+  position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--line-2) 50%, var(--line-2) 60%, transparent 60%);
+}
+
+@media (prefers-reduced-motion: reduce) { .note { animation: none; } }

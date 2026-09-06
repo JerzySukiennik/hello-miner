@@ -127,7 +127,6 @@ export function createUI(opts) {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (lobby.el.hidden === false) return;
-      if (lesson.isOpen()) return;
       if (docs.isOpen()) { docs.close(); return; }
       e.preventDefault();
       tree.toggle();

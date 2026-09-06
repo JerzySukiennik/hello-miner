@@ -28,10 +28,18 @@ export function createWindows(opts) {
   let z = 100;
   let cascade = 0;
 
+  function viewport() {
+    return {
+      w: layer.clientWidth || window.innerWidth || 1280,
+      h: layer.clientHeight || window.innerHeight || 800,
+    };
+  }
+
   function place(w) {
     if (w.moved) return;
-    const vw = layer.clientWidth || 1280;
-    const vh = layer.clientHeight || 800;
+    const v = viewport();
+    const vw = v.w;
+    const vh = v.h;
     const width = Math.min(420, Math.max(MIN_W, vw - 48));
     const height = Math.min(320, Math.max(MIN_H, vh - 200));
     w.el.style.width = width + 'px';
@@ -45,8 +53,9 @@ export function createWindows(opts) {
   }
 
   function clamp(w) {
-    const maxX = Math.max(0, layer.clientWidth - w.el.offsetWidth);
-    const maxY = Math.max(0, layer.clientHeight - 40);
+    const v = viewport();
+    const maxX = Math.max(0, v.w - w.el.offsetWidth);
+    const maxY = Math.max(0, v.h - 40);
     w.x = Math.min(Math.max(0, w.x), maxX);
     w.y = Math.min(Math.max(0, w.y), maxY);
     w.el.style.left = w.x + 'px';
