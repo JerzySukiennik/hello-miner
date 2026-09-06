@@ -315,6 +315,7 @@ function resolveColorClash(players) {
 function wireRoom(created) {
   room = created;
   stopAttract();
+  setTimeout(() => ui.showLesson('intro'), 700);
   document.body.classList.remove('in-lobby');
   ui.bindRoom(room);
   ui.hideLobby();

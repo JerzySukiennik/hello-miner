@@ -25,7 +25,7 @@ export function createStage(canvas, opts = {}) {
   scene.background = new THREE.Color(opts.background !== undefined ? opts.background : BG_COLOR);
 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 200);
-  camera.position.set(6.5, 7.5, 9.5);
+  camera.position.set(0, 8.2, 9.2);
 
   const sun = new THREE.DirectionalLight(0xfff1d6, 2.5);
   sun.position.set(6, 11, 7);

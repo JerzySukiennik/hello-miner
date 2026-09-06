@@ -621,7 +621,7 @@
     w.on('bought', (e) => bought.push(e.node));
     ok(w.buy('loops'), 'buying loops works with enough stone');
     eq(w.inv.stone, 80, 'buying deducts the cost');
-    ok(w.unlocked.has('repeat') && w.unlocked.has('while'), 'loops unlocks repeat and while');
+    ok(w.unlocked.has('for') && w.unlocked.has('while'), 'loops unlocks for, range and while');
     eq(bought[0], 'loops', 'buying emits a bought event');
     ok(!w.buy('loops'), 'a maxed node cannot be bought twice');
     ok(w.buy('grid'), 'grid level 1 is affordable');
@@ -697,7 +697,7 @@
     eq(JSON.stringify(s2), JSON.stringify(s1), 'snapshot survives an applySnapshot round trip');
     eq(w2.size, w.size, 'applySnapshot restores the size');
     eq(w2.totalMined, w.totalMined, 'applySnapshot restores totalMined');
-    ok(w2.unlocked.has('repeat'), 'applySnapshot restores unlocks');
+    ok(w2.unlocked.has('for'), 'applySnapshot restores unlocks');
     eq(w.snapshot().events.length, 0, 'snapshot drains the event buffer');
     eq(typeof s1.rng, 'number', 'the snapshot carries the rng state');
     eq(w2.rng.getState(), w.rng.getState(), 'applySnapshot restores the rng state');

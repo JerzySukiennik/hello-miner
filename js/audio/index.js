@@ -15,7 +15,7 @@ const SOUNDS = {
 };
 
 const EVENT_MAP = {
-  mined: ['mine', 'collect'],
+  mined: ['mine'],
   mine: ['mine'],
   collected: ['collect'],
   moved: ['move'],

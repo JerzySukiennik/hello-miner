@@ -401,24 +401,31 @@
 
 .scrim {
   position: absolute; inset: 0; z-index: 10000; pointer-events: auto;
-  background: rgba(12, 14, 18, .5);
-  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  background: var(--panel-solid);
   animation: fade .2s var(--ease);
 }
 .scrim[hidden] { display: none; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 
 .tree-wrap {
-  position: absolute; inset: 40px; display: flex; flex-direction: column; overflow: hidden;
-  animation: lift .26s var(--spring);
+  position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden;
+  background: none; border: 0; border-radius: 0; backdrop-filter: none;
+  animation: none;
 }
 .pane-head {
-  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
-  border-bottom: 1px solid var(--line); flex: 0 0 auto;
+  display: flex; align-items: center; gap: 16px;
+  padding: 22px clamp(24px, 5vw, 64px); flex: 0 0 auto;
 }
-.pane-head h2 { margin: 0; font-size: 16px; font-weight: 600; flex: 1; }
+.pane-head h2 {
+  margin: 0; flex: 1; font-size: 13px; font-weight: 500;
+  letter-spacing: .2em; text-transform: uppercase; color: var(--fg-dim);
+}
+.pane-esc {
+  font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--fg-faint);
+}
 .pane-inv { display: flex; gap: 10px; }
-.tree-scroll { flex: 1; overflow: auto; position: relative; padding: 24px; }
+.tree-scroll { flex: 1; overflow: auto; position: relative; padding: 8px clamp(24px, 5vw, 64px) 48px; }
 .tree-canvas { position: relative; margin: 0 auto; }
 .tree-canvas svg { position: absolute; inset: 0; overflow: visible; }
 .tree-canvas svg path { fill: none; stroke: rgba(242, 201, 76, .3); stroke-width: 1.5; }
@@ -496,4 +503,82 @@
     animation: panel-in-flow .24s var(--ease) both;
   }
   @keyframes panel-in-flow { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+}
+
+/* Upgrades take the whole screen: the island and the rest of the UI step aside */
+.hm-ui.tree-open .hud-ores,
+.hm-ui.tree-open .hud-right,
+.hm-ui.tree-open .win,
+.hm-ui.tree-open .dock { display: none !important; }
+body.tree-open #scene { visibility: hidden; }
+
+/* ---------- Lesson card ---------- */
+
+.lesson {
+  position: absolute; inset: 0; z-index: 12000; pointer-events: auto;
+  display: grid; place-items: center;
+  background: rgba(10, 11, 14, .62);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  animation: fade .18s var(--ease);
+}
+.lesson[hidden] { display: none; }
+
+.lesson-card {
+  width: min(560px, calc(100vw - 40px));
+  max-height: calc(100vh - 60px); overflow: auto;
+  padding: 26px 30px 22px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line-2); border-radius: 14px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, .5);
+  animation: lesson-in .3s var(--ease) both;
+}
+@keyframes lesson-in { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+
+.lesson-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.lesson-kicker {
+  flex: 1; font-size: 10px; letter-spacing: .24em; text-transform: uppercase; color: var(--gold);
+}
+.lesson-langs { display: flex; gap: 4px; }
+.lesson-lang {
+  pointer-events: auto; padding: 4px 9px; border-radius: 6px;
+  background: none; border: 1px solid var(--line); color: var(--fg-faint);
+  font-family: var(--display); font-size: 10px; letter-spacing: .12em; cursor: pointer;
+  transition: color .18s var(--ease), border-color .18s var(--ease);
+}
+.lesson-lang[aria-pressed="true"] { color: var(--fg); border-color: var(--line-2); }
+.lesson-lang:hover { color: var(--fg); }
+
+.lesson-title { margin: 0 0 14px; font-size: 22px; font-weight: 600; line-height: 1.2; }
+.lesson-body p { margin: 0 0 13px; font-size: 14px; line-height: 1.62; color: var(--fg); }
+.lesson-body p.lesson-note { font-size: 13px; color: var(--fg-dim); margin-bottom: 4px; }
+
+.lesson-deep-label {
+  font-size: 10px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--fg-faint); margin-bottom: 10px;
+}
+
+.lesson-tryit {
+  font-size: 10px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--fg-faint); margin: 16px 0 7px;
+}
+.lesson-code {
+  margin: 0 0 15px; padding: 14px 16px;
+  background: #14161b; border: 1px solid var(--line);
+  border-left: 3px solid var(--gold); border-radius: 8px;
+  font-family: var(--mono); font-size: 13px; line-height: 1.65;
+  white-space: pre; overflow-x: auto;
+}
+.lesson-code-line { color: #e8eaef; }
+
+.lesson-foot { display: flex; align-items: center; gap: 14px; margin-top: 20px; }
+.lesson-dots { flex: 1; display: flex; gap: 6px; }
+.lesson-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); }
+.lesson-dot.is-on { background: var(--gold); }
+.lesson-next { padding: 10px 26px; }
+
+body.lesson-open #scene { filter: blur(4px) brightness(.8); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lesson, .lesson-card { animation: none; }
+  body.lesson-open #scene { filter: brightness(.8); }
 }

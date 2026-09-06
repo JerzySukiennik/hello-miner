@@ -4,7 +4,7 @@ import { LangError } from './errors.js';
 
 export const KEYWORDS = [
   'if', 'elif', 'else', 'while', 'for', 'in', 'def', 'return',
-  'break', 'continue', 'pass', 'repeat', 'and', 'or', 'not',
+  'break', 'continue', 'pass', 'and', 'or', 'not',
   'True', 'False', 'None',
 ];
 
@@ -22,7 +22,7 @@ const CLOSE = new Set([')', ']', '}']);
 
 const STATEMENT_STARTERS = new Set([
   'if', 'elif', 'else', 'while', 'for', 'def', 'return',
-  'break', 'continue', 'pass', 'repeat',
+  'break', 'continue', 'pass',
 ]);
 
 function startsNewStatement(lines, from) {
@@ -116,6 +116,29 @@ export function tokenize(source) {
         }
         const raw = line.slice(i, j);
         push('num', Number(raw), lineNo, col);
+        i = j;
+        continue;
+      }
+
+      if ((ch === 'f' || ch === 'F') && (line[i + 1] === '"' || line[i + 1] === "'")) {
+        const quote = line[i + 1];
+        let j = i + 2;
+        let out = '';
+        let closed = false;
+        while (j < line.length) {
+          const c = line[j];
+          if (c === '\\' && j + 1 < line.length) {
+            const nx = line[j + 1];
+            out += nx === 'n' ? '\n' : nx === 't' ? '\t' : nx === 'r' ? '\r' : nx;
+            j += 2;
+            continue;
+          }
+          if (c === quote) { closed = true; j++; break; }
+          out += c;
+          j++;
+        }
+        if (!closed) throw new LangError(`missing closing ${quote === '"' ? '"' : "'"}`, lineNo, col);
+        push('fstr', out, lineNo, col);
         i = j;
         continue;
       }

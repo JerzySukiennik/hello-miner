@@ -5,6 +5,7 @@ import { createHud } from './hud.js';
 import { createWindows } from './windows.js';
 import { createTree } from './tree.js';
 import { createDocs } from './docs.js';
+import { createLesson } from './lesson.js';
 import { createToasts } from './toast.js';
 import { COLORS as DEFAULT_COLORS, ORE_INFO as DEFAULT_ORE_INFO } from '../shared/constants.js';
 
@@ -45,7 +46,7 @@ export function createUI(opts) {
   const hud = createHud({
     ores: ORES,
     oreInfo: ORE_INFO,
-    onTree: () => tree.toggle(),
+    onTree: () => { tree.toggle(); const on = tree.isOpen(); el.classList.toggle('tree-open', on); document.body.classList.toggle('tree-open', on); },
     onDocs: () => docs.toggle(),
     onCursorToggle: () => refreshCursors(),
   });
@@ -62,12 +63,14 @@ export function createUI(opts) {
   });
   const tree = createTree({ tree: TREE, oreInfo: ORE_INFO, onBuy: (id) => emit('buy', { nodeId: id }) });
   const docs = createDocs();
+  const lesson = createLesson();
 
   el.appendChild(wins.el);
   el.appendChild(hud.el);
   el.appendChild(toasts.el);
   el.appendChild(tree.el);
   el.appendChild(docs.el);
+  el.appendChild(lesson.el);
   el.appendChild(lobby.el);
   docs.setAllowed(allowed);
 
@@ -123,12 +126,18 @@ export function createUI(opts) {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (tree.isOpen()) { tree.close(); return; }
+      if (lobby.el.hidden === false) return;
+      if (lesson.isOpen()) return;
       if (docs.isOpen()) { docs.close(); return; }
+      e.preventDefault();
+      tree.toggle();
+      const on = tree.isOpen();
+      el.classList.toggle('tree-open', on);
+      document.body.classList.toggle('tree-open', on);
+      return;
     }
     const tag = document.activeElement && document.activeElement.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || lobby.el.hidden === false) return;
-    if (e.key === 't' || e.key === 'T') tree.toggle();
     if (e.key === 'd' || e.key === 'D') docs.toggle();
   });
 
@@ -174,7 +183,7 @@ export function createUI(opts) {
       }
       for (const id of wins.ids()) wins.get(id).editor.setExecLine(lines[id] == null ? null : lines[id]);
       for (const ev of snap.events || []) {
-        if (ev.type === 'bought') ui.toast('Unlocked ' + (ev.name || ev.nodeId));
+        if (ev.type === 'bought') { ui.toast('Unlocked ' + (ev.name || ev.node)); lesson.show(ev.node); }
         else if (ev.type === 'grow') ui.toast('The island grew to ' + (ev.size || snap.size) + '×' + (ev.size || snap.size));
         else if (ev.type === 'error') ui.toast(ev.message || 'Program error', 'error');
         else if (ev.type === 'died') ui.toast('A drone was lost', 'error');
@@ -194,6 +203,8 @@ export function createUI(opts) {
       if (localId && wins.has(localId)) wins.open(localId);
     },
     getLocalId() { return localId; },
+    showLesson(id) { lesson.show(id); },
+    lessonLang() { return lesson.lang(); },
     destroy() { el.remove(); },
   };
 

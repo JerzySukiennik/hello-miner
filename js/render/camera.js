@@ -15,6 +15,8 @@ export function createCameraRig(camera, domElement) {
   controls.panSpeed = 0.6;
   controls.minPolarAngle = THREE.MathUtils.degToRad(25);
   controls.maxPolarAngle = THREE.MathUtils.degToRad(70);
+  controls.minAzimuthAngle = THREE.MathUtils.degToRad(-38);
+  controls.maxAzimuthAngle = THREE.MathUtils.degToRad(38);
   controls.minDistance = 3.5;
   controls.maxDistance = 42;
   controls.target.set(0, 0, 0);
@@ -36,7 +38,7 @@ export function createCameraRig(camera, domElement) {
     const dist = THREE.MathUtils.clamp(distanceFor(radius), controls.minDistance, controls.maxDistance);
     if (instant) {
       dir.subVectors(camera.position, controls.target);
-      if (dir.lengthSq() < 1e-6) dir.set(0.6, 0.72, 0.9);
+      if (dir.lengthSq() < 1e-6) dir.set(0, 0.66, 0.75);
       dir.normalize().multiplyScalar(dist);
       controls.target.set(0, 0, 0);
       camera.position.copy(controls.target).add(dir);

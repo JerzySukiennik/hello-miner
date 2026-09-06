@@ -482,6 +482,51 @@ function* callValue(fnVal, args, ctx, node) {
   return null;
 }
 
+
+function methodError(name, node) {
+  return new LangError(node.line, node.col, `there is no "${name}" you can use with a dot here`);
+}
+
+function makeMethod(obj, name, node) {
+  if (Array.isArray(obj)) {
+    if (name === 'append') return { __method: (args) => {
+      if (obj.length + 1 > MAX_LIST) throw new LangError(node.line, node.col, `that list would be too big (max ${MAX_LIST} items)`);
+      obj.push(args[0] === undefined ? null : args[0]);
+      return null;
+    } };
+    if (name === 'pop') return { __method: () => (obj.length ? obj.pop() : null) };
+    if (name === 'clear') return { __method: () => { obj.length = 0; return null; } };
+    if (name === 'count') return { __method: (args) => obj.filter((v) => equals(v, args[0])).length };
+    if (name === 'index') return { __method: (args) => {
+      const i = obj.findIndex((v) => equals(v, args[0]));
+      if (i < 0) throw new LangError(node.line, node.col, 'that value is not in the list');
+      return i;
+    } };
+    if (name === 'reverse') return { __method: () => { obj.reverse(); return null; } };
+    throw methodError(name, node);
+  }
+  if (typeof obj === 'string') {
+    if (name === 'upper') return { __method: () => obj.toUpperCase() };
+    if (name === 'lower') return { __method: () => obj.toLowerCase() };
+    if (name === 'strip') return { __method: () => obj.trim() };
+    if (name === 'startswith') return { __method: (args) => obj.startsWith(String(args[0])) };
+    if (name === 'endswith') return { __method: (args) => obj.endsWith(String(args[0])) };
+    if (name === 'replace') return { __method: (args) => {
+      const out = obj.split(String(args[0])).join(String(args[1]));
+      if (out.length > MAX_TEXT) throw new LangError(node.line, node.col, `that text would be too long (max ${MAX_TEXT} letters)`);
+      return out;
+    } };
+    throw methodError(name, node);
+  }
+  if (obj instanceof Map) {
+    if (name === 'keys') return { __method: () => [...obj.keys()] };
+    if (name === 'values') return { __method: () => [...obj.values()] };
+    if (name === 'get') return { __method: (args) => (obj.has(args[0]) ? obj.get(args[0]) : (args.length > 1 ? args[1] : null)) };
+    throw methodError(name, node);
+  }
+  throw methodError(name, node);
+}
+
 function* evalExpr(node, env, ctx) {
   switch (node.type) {
     case 'Num':
@@ -519,6 +564,34 @@ function* evalExpr(node, env, ctx) {
       const key = yield* evalExpr(node.index, env, ctx);
       return getIndex(obj, key, node);
     }
+    case 'Slice': {
+      const obj = yield* evalExpr(node.obj, env, ctx);
+      const from = node.from ? num(yield* evalExpr(node.from, env, ctx), node, 'a slice') : null;
+      const to = node.to ? num(yield* evalExpr(node.to, env, ctx), node, 'a slice') : null;
+      if (typeof obj === 'string' || Array.isArray(obj)) {
+        const len = obj.length;
+        const norm = (v, dflt) => {
+          if (v === null) return dflt;
+          const i = Math.trunc(v);
+          return i < 0 ? Math.max(0, len + i) : Math.min(len, i);
+        };
+        return obj.slice(norm(from, 0), norm(to, len));
+      }
+      throw new LangError(node.line, node.col, 'only a list or some text can be sliced with [a:b]');
+    }
+    case 'FString': {
+      let out = '';
+      for (const part of node.parts) {
+        const v = yield* evalExpr(part, env, ctx);
+        out += part.type === 'Str' ? String(v) : repr(v, true);
+        if (out.length > MAX_TEXT) throw tooBigText(node);
+      }
+      return out;
+    }
+    case 'Attr': {
+      const obj = yield* evalExpr(node.obj, env, ctx);
+      return makeMethod(obj, node.name, node);
+    }
     case 'Unary': {
       const v = yield* evalExpr(node.operand, env, ctx);
       if (node.op === 'not') return !truthy(v);
@@ -554,6 +627,7 @@ function* evalExpr(node, env, ctx) {
         return yield* callValue(hit.value, args, ctx, node);
       }
       const fnVal = yield* evalExpr(node.callee, env, ctx);
+      if (fnVal && typeof fnVal === 'object' && typeof fnVal.__method === 'function') return fnVal.__method(args);
       return yield* callValue(fnVal, args, ctx, node);
     }
     default:

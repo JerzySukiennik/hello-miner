@@ -1,7 +1,7 @@
 // Parser (tokens to AST) with depth caps (expr 150, blocks 50, 10 errors) and compile-time name/gating checks.
 
 import { LangError, unknownNameMessage, lockedMessage } from './errors.js';
-import { KEYWORDS } from './tokenizer.js';
+import { KEYWORDS, tokenize } from './tokenizer.js';
 
 export const BUILTINS = [
   'move', 'mine', 'can_mine', 'place', 'get_ore', 'scan',
@@ -11,13 +11,14 @@ export const BUILTINS = [
 
 export const CONSTANTS = ['up', 'down', 'left', 'right', 'stone', 'coal', 'iron', 'gold', 'crystal', 'none'];
 
-export const GATED_CONSTRUCTS = ['if', 'while', 'repeat', 'for', 'def', 'list', 'dict'];
+export const GATED_CONSTRUCTS = ['if', 'while', 'for', 'def', 'list', 'dict'];
 
 const MAX_EXPR_DEPTH = 150;
 const MAX_BLOCK_DEPTH = 50;
 const MAX_PARSE_ERRORS = 10;
 const TOO_COMPLEX = 'this line is too complicated for me. Try splitting it into smaller lines.';
 const TOO_NESTED = 'these blocks are nested too deeply. Try moving some of them into a function.';
+const EMPTY_BLOCK = 'the lines after ":" have to be indented. Put four spaces in front of them.';
 
 const BUILTIN_SET = new Set(BUILTINS);
 const CONSTANT_SET = new Set(CONSTANTS);
@@ -153,9 +154,9 @@ class Parser {
         this.next();
         return this.parseBlockBody();
       }
-      return [];
+      this.fail(EMPTY_BLOCK);
     }
-    if (this.at('eof') || this.at('dedent')) return [];
+    if (this.at('eof') || this.at('dedent')) this.fail(EMPTY_BLOCK);
     const body = [this.parseStatement(true)];
     while (this.at('op', ';')) {
       this.next();
@@ -177,13 +178,28 @@ class Parser {
 
   parseStatement(inline = false) {
     const t = this.peek();
+    if (t.type === 'name' && t.value === 'repeat' && this.peek(1).type === 'op' && this.peek(1).value === '(') {
+      let depth = 0;
+      for (let k = 1; k < 200; k++) {
+        const tk = this.peek(k);
+        if (!tk || tk.type === 'eof' || tk.type === 'newline') break;
+        if (tk.type === 'op' && tk.value === '(') depth++;
+        else if (tk.type === 'op' && tk.value === ')') {
+          depth--;
+          if (depth === 0) {
+            const nx = this.peek(k + 1);
+            if (nx && nx.type === 'op' && nx.value === ':') this.fail('"repeat" is gone. Write "for i in range(n):" instead.', t);
+            break;
+          }
+        }
+      }
+    }
     if (t.type === 'kw') {
       switch (t.value) {
         case 'if': return this.parseIf();
         case 'while': return this.parseWhile();
         case 'for': return this.parseFor();
         case 'def': return this.parseDef();
-        case 'repeat': return this.parseRepeat();
         case 'return': {
           this.next();
           let value = null;
@@ -409,6 +425,12 @@ class Parser {
     return this.parsePostfix();
   }
 
+  parseExprOnly(at) {
+    const e = this.parseExpr();
+    if (!this.at('newline') && !this.at('eof')) this.fail('I did not understand what is inside { }', at);
+    return e;
+  }
+
   parsePostfix() {
     let node = this.parsePrimary();
     let n = 0;
@@ -434,9 +456,28 @@ class Parser {
         const t = this.next();
         this.enter(t);
         n++;
-        const index = this.parseExpr();
+        let from = null;
+        if (!this.at('op', ':')) from = this.parseExpr();
+        if (this.at('op', ':')) {
+          this.next();
+          let to = null;
+          if (!this.at('op', ']')) to = this.parseExpr();
+          this.expectOp(']', 'missing "]"');
+          node = { type: 'Slice', obj: node, from, to, line: t.line, col: t.col };
+          continue;
+        }
         this.expectOp(']', 'missing "]"');
-        node = { type: 'Index', obj: node, index, line: t.line, col: t.col };
+        node = { type: 'Index', obj: node, index: from, line: t.line, col: t.col };
+        continue;
+      }
+      if (this.at('op', '.')) {
+        const t = this.next();
+        this.enter(t);
+        n++;
+        const name = this.peek();
+        if (name.type !== 'name') this.fail('I expected a name after "."');
+        this.next();
+        node = { type: 'Attr', obj: node, name: String(name.value), line: t.line, col: t.col };
         continue;
       }
       this.exit(n);
@@ -446,6 +487,38 @@ class Parser {
 
   parsePrimary() {
     const t = this.peek();
+    if (t.type === 'fstr') {
+      this.next();
+      const parts = [];
+      const raw = String(t.value);
+      let buf = '';
+      for (let i = 0; i < raw.length; i++) {
+        const c = raw[i];
+        if (c === '{') {
+          if (raw[i + 1] === '{') { buf += '{'; i++; continue; }
+          let depth = 1;
+          let expr = '';
+          i++;
+          for (; i < raw.length; i++) {
+            if (raw[i] === '{') depth++;
+            if (raw[i] === '}') { depth--; if (!depth) break; }
+            expr += raw[i];
+          }
+          if (depth) this.fail('this f-text is missing a "}"', t);
+          if (buf) { parts.push({ type: 'Str', value: buf, line: t.line, col: t.col }); buf = ''; }
+          const sub = new Parser(tokenize(expr + '\n'), this.options).parseExprOnly(t);
+          parts.push(sub);
+          continue;
+        }
+        if (c === '}') {
+          if (raw[i + 1] === '}') { buf += '}'; i++; continue; }
+          this.fail('this f-text has a "}" with no "{" before it', t);
+        }
+        buf += c;
+      }
+      if (buf) parts.push({ type: 'Str', value: buf, line: t.line, col: t.col });
+      return { type: 'FString', parts, line: t.line, col: t.col };
+    }
     if (t.type === 'num') {
       this.next();
       return { type: 'Num', value: t.value, line: t.line, col: t.col };
@@ -635,7 +708,6 @@ export function resolve(program, allowed) {
           walkStmts(st.body);
           break;
         case 'Repeat':
-          gate('repeat', st);
           walkExpr(st.count);
           walkStmts(st.body);
           break;

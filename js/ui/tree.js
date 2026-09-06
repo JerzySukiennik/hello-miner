@@ -21,15 +21,16 @@ export function createTree(opts) {
   scrim.hidden = true;
   scrim.innerHTML =
     '<div class="tree-wrap panel">' +
-    '<div class="pane-head"><h2>Upgrade tree</h2><div class="pane-inv"></div>' +
+    '<div class="pane-head"><h2>Upgrades</h2><div class="pane-inv"></div>' +
+    '<span class="pane-esc">Esc to close</span>' +
     '<button class="btn t-close">Close</button></div>' +
     '<div class="tree-scroll"><div class="tree-canvas"><svg></svg></div></div></div>';
 
   const canvas = scrim.querySelector('.tree-canvas');
   const svg = scrim.querySelector('svg');
   const inv = scrim.querySelector('.pane-inv');
-  scrim.querySelector('.t-close').addEventListener('click', () => api.close());
-  scrim.addEventListener('mousedown', (e) => { if (e.target === scrim) api.close(); });
+  scrim.querySelector('.t-close').addEventListener('click', () => { api.close(); document.querySelector('.hm-ui').classList.remove('tree-open'); document.body.classList.remove('tree-open'); });
+
 
   const depth = new Map();
   function depthOf(id, seen) {

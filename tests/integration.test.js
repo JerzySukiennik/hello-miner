@@ -227,7 +227,7 @@
     eq(d.x + ',' + d.y, '0,0', 'g) the drone starts on a ready stone tile');
     const errs = [];
     w.on('error', (e) => errs.push(e));
-    w.runProgram('p1', build('repeat(3):\n    move(right)\n    mine()', w));
+    w.runProgram('p1', build('for __i in range(3):\n    move(right)\n    mine()', w, ['for', 'range']));
     ticks(w, 40);
     eq(t.kind, 'rock', 'g) three mines clear the boulder even though the drone stands on ore');
     eq(t.hp, 0, 'g) the cleared boulder has no hp left');

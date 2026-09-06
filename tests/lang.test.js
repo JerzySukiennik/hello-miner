@@ -78,7 +78,7 @@ async function main() {
   ok('exports compile', typeof compile === 'function');
   ok('exports createRun', typeof createRun === 'function');
   ok('exports tokenize', typeof tokenize === 'function');
-  ok('KEYWORDS has repeat', KEYWORDS.includes('repeat'));
+  ok('KEYWORDS has no repeat', !KEYWORDS.includes('repeat'));
   ok('BUILTINS has spawn_drone', BUILTINS.includes('spawn_drone'));
 
   // --- tokenizer ---
@@ -137,7 +137,7 @@ async function main() {
   eq('while with break', printsOf('i = 0\nwhile True:\n    i += 1\n    if i > 2:\n        break\nprint(i)'), ['3']);
   eq('continue', printsOf('for i in range(4):\n    if i == 1:\n        continue\n    print(i)'), ['0', '2', '3']);
   eq('for over list', printsOf('for x in [1, 2]:\n    print(x)'), ['1', '2']);
-  eq('repeat', printsOf('repeat(3):\n    print("x")'), ['x', 'x', 'x']);
+  eq('repeat', printsOf('for __i in range(3):\n    print("x")'), ['x', 'x', 'x']);
   eq('def and return', printsOf('def add(a, b):\n    return a + b\nprint(add(2, 3))'), ['5']);
   eq('recursion', printsOf('def f(n):\n    if n <= 1:\n        return 1\n    return n * f(n - 1)\nprint(f(5))'), ['120']);
   eq('pass is a no-op', printsOf('if True:\n    pass\nprint(1)'), ['1']);
@@ -151,8 +151,9 @@ async function main() {
   // --- tolerant indentation ---
   eq('mixed tabs and spaces', printsOf('if True:\n\tprint(1)\n        print(2)'), ['1', '2']);
   eq('uneven deeper indent', printsOf('if True:\n  print(1)\n      print(2)\nprint(3)'), ['1', '2', '3']);
-  ok('unclosed block at EOF compiles', compile('repeat(3):').errors.length === 0);
-  eq('unclosed block runs as empty', printsOf('print(1)\nrepeat(2):'), ['1']);
+  ok('a block opener with no indented body is an error', /have to be indented/.test((compile('for __i in range(3):').errors[0] || {}).message || ''));
+  ok('an unindented body is an error, not a silent empty loop', /have to be indented/.test((compile('while True:\nprint(1)').errors[0] || {}).message || ''));
+  eq('the error points at the line that should have been indented', compile('mine()\nwhile True:\nprint(1)').errors[0].line, 3);
   eq('inline suite', printsOf('if True: print(9)'), ['9']);
 
   // --- sensors are synchronous ---
@@ -167,7 +168,7 @@ async function main() {
   eq('mine yields', run('mine()').yields, [{ op: 'mine' }]);
   eq('place yields', run('place(coal)').yields, [{ op: 'place', ore: 'coal' }]);
   eq('wait yields ms', run('wait(0.5)').yields, [{ op: 'wait', ms: 500 }]);
-  eq('loop yields a tick each iteration', run('repeat(2):\n    mine()').yields, [
+  eq('loop yields a tick each iteration', run('for __i in range(2):\n    mine()').yields, [
     { op: 'tick' }, { op: 'mine' }, { op: 'tick' }, { op: 'mine' },
   ]);
   eq('function call yields a tick', run('def f():\n    mine()\nf()').yields, [{ op: 'tick' }, { op: 'mine' }]);
@@ -197,7 +198,7 @@ async function main() {
 
   // --- the full drone program ---
   {
-    const src = 'repeat(3):\n    if can_mine():\n        mine()\n    move(right)\n';
+    const src = 'for __i in range(3):\n    if can_mine():\n        mine()\n    move(right)\n';
     let calls = 0;
     const api = makeApi({ can_mine: () => { calls++; return calls !== 2; } });
     const out = compile(src);
@@ -291,18 +292,18 @@ async function main() {
   // --- gating ---
   {
     const allowed = new Set(['move', 'mine']);
-    const e = firstError('repeat(2):\n    mine()', { allowed });
-    ok('repeat is gated', e && e.message === 'Line 1: "repeat" is locked. Unlock it in the tree.', e && e.message);
+    const e = firstError('for __i in range(2):\n    mine()', { allowed });
+    ok('for is gated', e && e.message === 'Line 1: "for" is locked. Unlock it in the tree.', e && e.message);
   }
   {
-    const allowed = new Set(['move', 'mine', 'repeat']);
-    const e = firstError('repeat(2):\n    place(coal)', { allowed });
+    const allowed = new Set(['move', 'mine', 'for', 'range']);
+    const e = firstError('for __i in range(2):\n    place(coal)', { allowed });
     ok('place is gated', e && e.raw === '"place" is locked. Unlock it in the tree.', e && e.message);
     ok('gated error line points at place', e && e.line === 2, e && String(e.line));
   }
   {
-    const allowed = new Set(['move', 'mine', 'repeat']);
-    ok('allowed program compiles clean', compile('repeat(2):\n    mine()\n    move(up)', { allowed }).errors.length === 0);
+    const allowed = new Set(['move', 'mine', 'for', 'range']);
+    ok('allowed program compiles clean', compile('for __i in range(2):\n    mine()\n    move(up)', { allowed }).errors.length === 0);
   }
   {
     const allowed = new Set(['print']);
@@ -313,7 +314,7 @@ async function main() {
     ok('for is gated', firstError('for i in [1]:\n    print(i)', { allowed }).raw !== undefined);
     ok('while is gated', firstError('while True:\n    print(1)', { allowed }).raw === '"while" is locked. Unlock it in the tree.');
   }
-  ok('no allowed set means nothing is locked', compile('repeat(1):\n    place(gold)').errors.length === 0);
+  ok('no allowed set means nothing is locked', compile('for __i in range(1):\n    place(gold)').errors.length === 0);
 
   // --- runtime errors ---
   {
@@ -388,7 +389,7 @@ async function main() {
     ok('growing a list in a loop is capped', e instanceof LangError && /too big/.test(e.raw), e && e.message);
   }
   {
-    const e = runtimeError('d = {}\nrepeat(20000):\n    d[get_pos_x()] = 1', makeApi({ get_pos_x: (() => { let n = 0; return () => n++; })() }));
+    const e = runtimeError('d = {}\nfor __i in range(20000):\n    d[get_pos_x()] = 1', makeApi({ get_pos_x: (() => { let n = 0; return () => n++; })() }));
     ok('growing a dict in a loop is capped', e instanceof LangError && /dict would be too big \(max 10000 keys\)/.test(e.raw), e && e.message);
   }
   {
@@ -468,7 +469,7 @@ async function main() {
 
   // --- unclosed brackets are reported on their own line ---
   {
-    const e = firstError('mine()\nprint(1\nrepeat(2):\n    mine()');
+    const e = firstError('mine()\nprint(1\nfor __i in range(2):\n    mine()');
     ok('unclosed "(" is reported on the line that opened it',
       e instanceof LangError && e.line === 2, e && e.message);
     ok('unclosed "(" says what is missing', e && e.raw === 'missing ")"', e && e.raw);

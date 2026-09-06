@@ -50,8 +50,8 @@ export const TREE = [
     ],
   },
   {
-    id: 'loops', name: 'Loops', levels: 1, requires: [], unlocks: ['repeat', 'while'],
-    desc: 'repeat(n): runs a block n times. while cond: runs it until the condition is False.',
+    id: 'loops', name: 'Loops', levels: 1, requires: [], unlocks: ['for', 'range', 'while'],
+    desc: 'for i in range(n): runs a block n times. while cond: runs it until the condition is False.',
     cost: [{ stone: 20 }],
   },
   {
@@ -101,12 +101,12 @@ export const TREE = [
     cost: [{ stone: 250, coal: 50 }],
   },
   {
-    id: 'for_loops', name: 'For Loops', levels: 1, requires: ['functions'], unlocks: ['for', 'range'],
-    desc: 'for x in range(n): walks over numbers or over a list.',
+    id: 'for_loops', name: 'Counting Loops', levels: 1, requires: ['functions'], unlocks: ['enumerate'],
+    desc: 'for i, item in enumerate(plan): walks a list and counts at the same time.',
     cost: [{ stone: 300, coal: 80 }],
   },
   {
-    id: 'lists', name: 'Lists', levels: 1, requires: ['for_loops'], unlocks: ['list'],
+    id: 'lists', name: 'Lists', levels: 1, requires: ['functions'], unlocks: ['list'],
     desc: 'Keep many values in one name: plan = [up, right, down].',
     cost: [{ coal: 120, iron: 20 }],
   },
