@@ -1,0 +1,6 @@
+{
+  "name": "hello-miner",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node tests/lang.test.js && node tests/sim.test.js && node tests/net.test.js && node tests/integration.test.js" }
+}

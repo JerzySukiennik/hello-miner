@@ -1,0 +1,125 @@
+{
+  "helloMiner": {
+    "rooms": {
+      "$code": {
+        ".read": true,
+        ".write": "$code.matches(/^[A-Z]{4}$/)",
+        "meta": {
+          ".write": true,
+          "host": {
+            ".write": true,
+            "id": {
+              ".validate": "newData.isString()"
+            },
+            "beat": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "players": {
+          ".write": true,
+          "$playerId": {
+            ".write": true,
+            "nick": {
+              ".validate": "newData.isString() && newData.val().length <= 24"
+            },
+            "color": {
+              ".validate": "newData.isString() || newData.val() == null"
+            },
+            "joinedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "presence": {
+          ".write": true,
+          "$playerId": {
+            ".write": true,
+            "nick": {
+              ".validate": "newData.isString()"
+            },
+            "color": {
+              ".validate": "newData.isString() || newData.val() == null"
+            },
+            "cursor": {
+              ".write": true
+            },
+            "lastSeen": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "state": {
+          ".write": true,
+          ".validate": "newData.isString()"
+        },
+        "cmd": {
+          ".write": true,
+          "$cmdId": {
+            ".write": true,
+            "from": {
+              ".validate": "newData.isString()"
+            },
+            "type": {
+              ".validate": "newData.isString()"
+            },
+            "payload": {
+              ".write": true
+            },
+            "t": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "yupdates": {
+          ".write": true,
+          "$updateId": {
+            ".write": true,
+            "from": {
+              ".validate": "newData.isString()"
+            },
+            "b64": {
+              ".validate": "newData.isString()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "ysnapshot": {
+          ".write": true,
+          "$playerId": {
+            ".write": true,
+            "from": {
+              ".validate": "newData.isString()"
+            },
+            "b64": {
+              ".validate": "newData.isString()"
+            },
+            "at": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}

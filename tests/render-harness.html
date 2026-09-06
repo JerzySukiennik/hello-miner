@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Hello, Miner — render harness</title>
+<style>
+  html,body{margin:0;height:100%;background:#6f8aa0;overflow:hidden}
+  #stage{position:absolute;inset:0}
+  #c{display:block;width:100%;height:100%}
+  #hud{position:absolute;left:10px;top:10px;z-index:10;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+       color:#fff;background:rgba(20,32,42,.55);padding:8px 10px;border-radius:8px;white-space:pre;pointer-events:none}
+  #ctl{position:absolute;right:10px;top:10px;z-index:10;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  #ctl button{font:12px/1 ui-monospace,monospace;padding:7px 10px;border:0;border-radius:7px;background:#243440;color:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c"></canvas></div>
+<div id="hud">booting…</div>
+<div id="ctl">
+  <button id="b4">4x4</button>
+  <button id="b6">6x6</button>
+  <button id="b8">8x8</button>
+  <button id="bfit">fitToGrid</button>
+  <button id="bbub">bubble</button>
+  <button id="bkill">kill d3</button>
+</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import { createRenderer } from '../js/render/index.js';
+import { ORES, ORE_INFO, ACTION_MS, DEATH_MS } from '../js/shared/constants.js';
+
+const canvas = document.getElementById('c');
+const hud = document.getElementById('hud');
+const renderer = createRenderer(canvas);
+window.__renderer = renderer;
+
+const players = {
+  p1: { id: 'p1', nick: 'jurek', color: '#f2a541' },
+  p2: { id: 'p2', nick: 'narek', color: '#4fb3e8' },
+  p3: { id: 'p3', nick: 'tata',  color: '#5ccc8a' },
+};
+renderer.setPlayers(players);
+
+const world = { t: 0, size: 4, tiles: [], drones: {}, inv: {}, unlocked: ['move','mine'], levels: { speed: 0 }, totalMined: 0 };
+
+function seedTiles(size) {
+  const tiles = [];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      let ore = 'none', kind = 'rock', hp = 0, stage = 0;
+      if (x === size - 1 && y === 0) kind = 'boulder', hp = 3;
+      else if (x === 0 && y === size - 1) kind = 'lava';
+      else if (x === 1 && y === size - 1) kind = 'gas';
+      else { ore = ORES[i % ORES.length]; stage = ((i * 37) % 100) / 100; }
+      tiles.push({ ore, stage, stock: 0, kind, hp });
+    }
+  }
+  return tiles;
+}
+world.tiles = seedTiles(world.size);
+
+function setSize(size) {
+  world.size = size;
+  world.tiles = seedTiles(size);
+  for (const d of Object.values(world.drones)) {
+    d.x = Math.min(d.x, size - 1); d.y = Math.min(d.y, size - 1);
+    d.homeX = Math.min(d.homeX, size - 1); d.homeY = Math.min(d.homeY, size - 1);
+    d.action = null; d.elapsed = 0; d.queue = [];
+  }
+}
+
+function mkDrone(id, owner, x, y, script) {
+  return { id, owner, x, y, homeX: x, homeY: y, dir: 'up', action: null, line: 1,
+           state: 'running', carrying: 'none', elapsed: 0, queue: [], script, deadT: 0 };
+}
+
+const scripts = {
+  patrol: (d) => [{ op: 'move', dir: 'right' }, { op: 'move', dir: 'right' }, { op: 'wait', ms: 250 }],
+  miner: (d) => [{ op: 'mine' }, { op: 'move', dir: 'up' }, { op: 'mine' }, { op: 'move', dir: 'left' }],
+  builder: (d) => [{ op: 'place', ore: 'coal' }, { op: 'move', dir: 'down' }, { op: 'mine' }, { op: 'move', dir: 'right' }],
+};
+
+const Q = new URLSearchParams(location.search);
+world.drones.d1 = mkDrone('d1', 'p1', 0, 3, 'patrol');
+world.drones.d2 = mkDrone('d2', 'p2', 1, 1, 'miner');
+world.drones.d3 = mkDrone('d3', 'p3', 2, 2, 'builder');
+const wantDrones = Math.max(3, Math.min(8, Number(Q.get('drones')) || 3));
+const kinds = ['patrol', 'miner', 'builder'];
+for (let i = 3; i < wantDrones; i++) {
+  const pid = 'p' + (i + 1);
+  players[pid] = { id: pid, nick: 'bot' + i, color: ['#f26b5b','#9b7bf2','#f27ab0','#b8d94a','#8fd9e6'][i - 3] };
+  world.drones['d' + (i + 1)] = mkDrone('d' + (i + 1), pid, i % 4, (i * 2) % 4, kinds[i % 3]);
+}
+renderer.setPlayers(players);
+if (Q.get('size')) setSize(Math.max(1, Math.min(8, Number(Q.get('size')))));
+
+const DIR = { up: [0, 1], down: [0, -1], left: [-1, 0], right: [1, 0] };
+
+function durOf(op) { return (ACTION_MS[op] || 300) * Math.pow(0.85, world.levels.speed || 0); }
+
+function tickWorld(dtMs) {
+  world.t += dtMs;
+  for (const t of world.tiles) {
+    if (t.ore === 'none' || t.kind !== 'rock') continue;
+    if (t.stage < 1) t.stage = Math.min(1, t.stage + dtMs / ORE_INFO[t.ore].growMs);
+    else if (Math.random() < dtMs / 9000) t.stage = 0;
+  }
+  for (const d of Object.values(world.drones)) {
+    if (d.state === 'dead') {
+      d.deadT += dtMs;
+      if (d.deadT >= DEATH_MS) { d.state = 'running'; d.deadT = 0; d.x = d.homeX; d.y = d.homeY; d.action = null; d.queue = []; }
+      continue;
+    }
+    if (!d.action) {
+      if (!d.queue.length) d.queue = scripts[d.script](d);
+      const next = d.queue.shift();
+      if (next.op === 'wait') { d.action = null; d.waitUntil = world.t + next.ms; }
+      else {
+        if (next.dir) d.dir = next.dir;
+        d.action = { op: next.op, progress: 0, fromX: d.x, fromY: d.y, dir: next.dir, ore: next.ore };
+        d.elapsed = 0;
+      }
+    }
+    if (d.waitUntil && world.t < d.waitUntil) continue;
+    d.waitUntil = 0;
+    if (!d.action) continue;
+    d.elapsed += dtMs;
+    const dur = durOf(d.action.op);
+    d.action.progress = Math.min(1, d.elapsed / dur);
+    d.line = 1 + (d.action.op === 'move' ? 0 : 2);
+    if (d.action.progress >= 1) {
+      const a = d.action;
+      if (a.op === 'move') {
+        const [dx, dy] = DIR[a.dir];
+        d.x = (d.x + dx + world.size) % world.size;
+        d.y = (d.y + dy + world.size) % world.size;
+        const t = world.tiles[d.y * world.size + d.x];
+        if (t && (t.kind === 'lava' || t.kind === 'gas')) { d.state = 'dead'; d.deadT = 0; }
+      } else if (a.op === 'mine') {
+        const t = world.tiles[d.y * world.size + d.x];
+        if (t && t.kind === 'rock' && t.stage >= 1) { t.ore = 'none'; t.stage = 0; world.totalMined++; }
+      } else if (a.op === 'place') {
+        const t = world.tiles[d.y * world.size + d.x];
+        if (t && t.kind === 'rock' && t.ore === 'none') { t.ore = a.ore; t.stage = 0; }
+      }
+      d.action = null;
+    }
+  }
+}
+
+function snapshot() {
+  const drones = {};
+  for (const d of Object.values(world.drones)) {
+    drones[d.id] = {
+      id: d.id, owner: d.owner, x: d.x, y: d.y, dir: d.dir,
+      action: d.action ? { op: d.action.op, progress: d.action.progress, fromX: d.action.fromX, fromY: d.action.fromY } : null,
+      line: d.line, state: d.state, carrying: 'none',
+    };
+  }
+  return {
+    t: world.t, size: world.size,
+    tiles: world.tiles.map((t) => ({ ore: t.ore, stage: t.stage, stock: t.stock, kind: t.kind, hp: t.hp })),
+    drones, inv: world.inv, unlocked: world.unlocked, levels: world.levels,
+    totalMined: world.totalMined, events: [],
+  };
+}
+
+document.getElementById('b4').onclick = () => setSize(4);
+document.getElementById('b6').onclick = () => setSize(6);
+document.getElementById('b8').onclick = () => setSize(8);
+document.getElementById('bfit').onclick = () => renderer.fitToGrid();
+document.getElementById('bbub').onclick = () => renderer.bubble('d1', 'Hello, Miner');
+document.getElementById('bkill').onclick = () => { world.drones.d3.state = 'dead'; world.drones.d3.deadT = 0; };
+
+canvas.addEventListener('pointerdown', (e) => {
+  const hit = renderer.pick(e.clientX, e.clientY);
+  if (hit) console.log('pick', JSON.stringify({ type: hit.type, x: hit.x, y: hit.y, id: hit.id }));
+});
+addEventListener('resize', () => renderer.resize());
+
+let last = performance.now();
+let accSnap = 0;
+let started = performance.now();
+let phase = 0;
+const droneIds = () => Object.keys(world.drones);
+const bubbleTexts = ['Hello, Miner', 'stone: 12', 'mining…', 'wrapped!'];
+let bubbleAt = 2000;
+let bubbleI = 0;
+
+const fps = { n: 0, acc: 0, val: 0 };
+window.__fps = fps;
+
+renderer.setSnapshot(snapshot(), performance.now());
+
+function loop(now) {
+  const dt = Math.min(100, now - last);
+  last = now;
+  tickWorld(dt);
+  accSnap += dt;
+  if (accSnap >= 100) { accSnap = 0; renderer.setSnapshot(snapshot(), now); }
+  renderer.frame(now);
+
+  const elapsed = now - started;
+  if (!Q.get('size')) {
+    if (phase === 0 && elapsed > 9000) { phase = 1; setSize(6); }
+    if (phase === 1 && elapsed > 20000) { phase = 2; setSize(8); }
+  }
+  if (elapsed > bubbleAt) { bubbleAt += 4500; const ids = droneIds(); renderer.bubble(ids[bubbleI % ids.length], bubbleTexts[bubbleI % bubbleTexts.length]); bubbleI++; }
+
+  fps.n++; fps.acc += dt;
+  if (fps.acc >= 500) { fps.val = Math.round((fps.n * 1000) / fps.acc); fps.n = 0; fps.acc = 0; }
+  const st = renderer.stats();
+  hud.textContent = `fps ${fps.val}\ncalls ${st.calls}\ntris ${st.triangles}\ndpr ${st.pixelRatio.toFixed(2)}\ngrid ${world.size}x${world.size}\ndrones ${Object.keys(world.drones).length}`;
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

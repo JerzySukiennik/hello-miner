@@ -1,0 +1,74 @@
+<!doctype html>
+<!-- Manual harness for js/audio: one button per sound plus a simulated sim-event burst. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hello, Miner - audio harness</title>
+<style>
+  body { margin: 0; padding: 24px; background: #6f8aa0; color: #12202b; font: 14px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { margin: 0 0 16px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  button { font: inherit; padding: 8px 14px; border: 1px solid #12202b; border-radius: 6px; background: #d9a75f; cursor: pointer; }
+  button:hover { background: #c98f4a; }
+  button.alt { background: #e7eef3; }
+  pre { background: #12202b; color: #cfe3f0; padding: 12px; border-radius: 6px; overflow: auto; max-height: 40vh; }
+</style>
+</head>
+<body>
+<h1>audio harness</h1>
+<p>Click <b>unlock()</b> first (browsers need a gesture), then any sound.</p>
+<div class="row" id="controls"></div>
+<div class="row" id="sounds"></div>
+<pre id="log">ready</pre>
+<script type="module">
+import { createAudio } from '../js/audio/index.js';
+
+const audio = createAudio({ base: '../assets/sounds/' });
+window.audio = audio;
+const logEl = document.getElementById('log');
+const lines = [];
+function log(msg) {
+  lines.push(msg);
+  if (lines.length > 40) lines.shift();
+  logEl.textContent = lines.join('\n');
+}
+window.addEventListener('error', (e) => log('ERROR ' + e.message));
+window.addEventListener('unhandledrejection', (e) => log('REJECT ' + e.reason));
+
+function button(parent, label, cls, fn) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  if (cls) b.className = cls;
+  b.addEventListener('click', fn);
+  parent.appendChild(b);
+  return b;
+}
+
+const controls = document.getElementById('controls');
+button(controls, 'unlock()', 'alt', () => {
+  audio.unlock().then((ok) => log('unlock -> ' + ok + ' | ' + JSON.stringify(audio.stats())));
+});
+button(controls, 'events burst', 'alt', () => {
+  const events = [
+    { type: 'mined', ore: 'coal' }, { type: 'moved' }, { type: 'moved' },
+    { type: 'placed', ore: 'stone' }, { type: 'spawned' }, { type: 'grow', size: 3 },
+    { type: 'bought', node: 'loops' }, { type: 'died' }, { type: 'error', message: 'x' },
+    { type: 'print', text: 'hello' }, { type: 'mined', ore: 'gold' }
+  ];
+  audio.handleEvents(events);
+  log('burst of ' + events.length + ' events sent');
+});
+button(controls, 'toggle mute', 'alt', () => log('muted -> ' + audio.setMuted(!audio.isMuted())));
+button(controls, 'stats', 'alt', () => log(JSON.stringify(audio.stats(), null, 2)));
+
+const sounds = document.getElementById('sounds');
+for (const name of audio.names) {
+  button(sounds, name, '', () => {
+    audio.play(name).then((ok) => log('play ' + name + ' -> ' + ok));
+  });
+}
+</script>
+</body>
+</html>
