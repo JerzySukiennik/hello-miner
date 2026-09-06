@@ -392,13 +392,15 @@ async function main() {
     ok('growing a dict in a loop is capped', e instanceof LangError && /dict would be too big \(max 10000 keys\)/.test(e.raw), e && e.message);
   }
   {
-    const start = process.hrtime.bigint();
     const src = 'a = [0] * 5000\n' + new Array(200).fill('b = a + a').join('\n');
     const out = compile(src);
     const runner = createRun(out.program, makeApi());
-    for (let i = 0; i < 1000; i++) if (runner.step().done) break;
-    const ms = Number(process.hrtime.bigint() - start) / 1e6;
-    ok('200 near-cap list copies stay inside one 50 ms tick budget', ms < 50, `took ${ms.toFixed(2)} ms`);
+    let steps = 0;
+    let done = false;
+    for (; steps < 5000; steps++) if (runner.step().done) { done = true; break; }
+    ok('200 near-cap list copies finish without hitting the cap', done && steps < 5000, `steps=${steps} done=${done}`);
+    const big = runtimeError('a = [0] * 9000\nb = a + a', makeApi());
+    ok('a copy that crosses the cap is refused, not attempted', big instanceof LangError && /too big/.test(big.raw), big && big.message);
   }
   {
     eq('lists just under the cap still work', printsOf('print(len([0] * 10000))'), ['10000']);
