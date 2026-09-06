@@ -4,6 +4,7 @@ import { LangError, unknownNameMessage, lockedMessage } from './errors.js';
 import { KEYWORDS, tokenize } from './tokenizer.js';
 
 export const BUILTINS = [
+  'enumerate',
   'move', 'mine', 'can_mine', 'place', 'get_ore', 'scan',
   'get_pos_x', 'get_pos_y', 'get_world_size', 'count', 'wait',
   'print', 'spawn_drone', 'len', 'range', 'str', 'int', 'abs', 'min', 'max',
@@ -272,12 +273,17 @@ class Parser {
   parseFor() {
     const t = this.next();
     if (!this.at('name')) this.fail('"for" needs a variable name');
-    const name = this.next().value;
+    const names = [this.next().value];
+    while (this.at('op', ',')) {
+      this.next();
+      if (!this.at('name')) this.fail('"for" needs a variable name after the comma');
+      names.push(this.next().value);
+    }
     if (!this.at('kw', 'in')) this.fail('missing "in" after the loop variable');
     this.next();
     const iter = this.parseExpr();
     const body = this.parseSuite();
-    return { type: 'For', name, iter, body, line: t.line, col: t.col };
+    return { type: 'For', name: names[0], names, iter, body, line: t.line, col: t.col };
   }
 
   parseDef() {
@@ -610,7 +616,7 @@ function collectNames(stmts, out) {
         if (st.target.type === 'Name') out.add(st.target.name);
         break;
       case 'For':
-        out.add(st.name);
+        for (const n of st.names || [st.name]) out.add(n);
         collectNames(st.body, out);
         break;
       case 'Def':

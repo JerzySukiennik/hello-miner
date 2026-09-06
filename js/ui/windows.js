@@ -32,25 +32,29 @@ export function createWindows(opts) {
 
   function publish(w) {
     if (!layout || applying) return;
+    const v = viewport();
     layout.set(w.id, {
-      x: Math.round(w.x), y: Math.round(w.y),
-      w: Math.round(w.el.offsetWidth), h: Math.round(w.el.offsetHeight),
+      fx: +(w.x / Math.max(1, v.w)).toFixed(5),
+      fy: +(w.y / Math.max(1, v.h)).toFixed(5),
+      fw: +(w.el.offsetWidth / Math.max(1, v.w)).toFixed(5),
+      fh: +(w.el.offsetHeight / Math.max(1, v.h)).toFixed(5),
       min: !!w.minimised,
     });
   }
 
-  function applyLayout(id, v) {
+  function applyLayout(id, val) {
     const w = wins.get(id);
-    if (!w || !v || w.dragging) return;
+    if (!w || !val || w.dragging) return;
+    const v = viewport();
     applying = true;
     w.moved = true;
-    if (typeof v.w === 'number') w.el.style.width = Math.max(MIN_W, v.w) + 'px';
-    if (typeof v.h === 'number') w.el.style.height = Math.max(MIN_H, v.h) + 'px';
-    if (typeof v.x === 'number') w.x = v.x;
-    if (typeof v.y === 'number') w.y = v.y;
+    if (typeof val.fw === 'number') w.el.style.width = Math.max(MIN_W, Math.min(v.w - 8, Math.round(val.fw * v.w))) + 'px';
+    if (typeof val.fh === 'number') w.el.style.height = Math.max(MIN_H, Math.min(v.h - 8, Math.round(val.fh * v.h))) + 'px';
+    if (typeof val.fx === 'number') w.x = Math.round(val.fx * v.w);
+    if (typeof val.fy === 'number') w.y = Math.round(val.fy * v.h);
     clamp(w);
-    if (v.min && !w.minimised) minimise(w, true);
-    else if (!v.min && w.minimised) restore(w, true);
+    if (val.min && !w.minimised) minimise(w, true);
+    else if (!val.min && w.minimised) restore(w, true);
     w.editor.refresh();
     applying = false;
   }
@@ -230,7 +234,12 @@ export function createWindows(opts) {
     w.editor.setReadOnly(false);
   }
 
-  window.addEventListener('resize', () => { for (const w of wins.values()) { place(w); clamp(w); } });
+  window.addEventListener('resize', () => {
+    for (const w of wins.values()) {
+      if (layout && layout.has(w.id)) applyLayout(w.id, layout.get(w.id));
+      else { place(w); clamp(w); }
+    }
+  });
 
   return {
     el: layer,

@@ -426,7 +426,7 @@
   color: var(--fg-faint);
 }
 .pane-inv { display: flex; gap: 10px; }
-.tree-scroll { flex: 1; overflow: auto; position: relative; padding: 8px clamp(24px, 5vw, 64px) 48px; }
+.tree-scroll { flex: 1; overflow: auto; touch-action: pan-y; overscroll-behavior: contain; position: relative; padding: 8px clamp(24px, 5vw, 64px) 48px; }
 .tree-canvas { position: relative; margin: 0 auto; }
 .tree-canvas svg { position: absolute; inset: 0; overflow: visible; }
 .tree-canvas svg path { fill: none; stroke: rgba(242, 201, 76, .3); stroke-width: 1.5; }
@@ -456,25 +456,31 @@
 .node-buy { margin-left: auto; padding: 3px 9px; font-size: 11px; border-radius: 6px; }
 
 .docs {
-  position: absolute; top: 0; right: 0; bottom: 0; width: 380px; max-width: 92vw;
+  position: absolute; inset: 0;
   display: flex; flex-direction: column; overflow: hidden;
-  border-radius: var(--r) 0 0 var(--r); pointer-events: auto;
-  animation: slide-in .26s var(--ease);
+  background: none; border: 0; border-radius: 0; backdrop-filter: none;
+  pointer-events: auto;
 }
-@keyframes slide-in { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
-.docs-list { flex: 1; overflow: auto; padding: 8px 14px 18px; }
-.doc { padding: 11px 0; border-bottom: 1px solid var(--line); }
-.doc:last-child { border-bottom: 0; }
-.doc.locked { opacity: .4; }
+.docs-list {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  touch-action: pan-y; overscroll-behavior: contain;
+  padding: 8px clamp(24px, 5vw, 64px) 56px;
+  columns: 380px; column-gap: 44px;
+}
+.doc {
+  break-inside: avoid; padding: 0 0 22px;
+  display: inline-block; width: 100%;
+}
+.doc.locked { opacity: .38; }
 .doc-h { display: flex; align-items: baseline; gap: 8px; }
-.doc-sig { font-family: var(--mono); font-size: 13px; color: #7fd4e8; }
+.doc-sig { font-family: var(--mono); font-size: 14px; color: #7fd4e8; }
 .doc.locked .doc-sig { color: var(--fg-dim); }
-.doc-lock { font-size: 10px; color: var(--gold); margin-left: auto; }
-.doc-d { font-size: 12px; color: var(--fg-dim); margin: 4px 0 6px; line-height: 1.4; }
+.doc-lock { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); margin-left: auto; }
+.doc-d { font-size: 13px; color: var(--fg-dim); margin: 6px 0 9px; line-height: 1.55; max-width: 46ch; }
 .doc pre {
-  margin: 0; padding: 7px 9px; border-radius: 6px;
-  background: rgba(0, 0, 0, .3); border: 1px solid var(--line);
-  font-family: var(--mono); font-size: 11.5px; line-height: 1.5;
+  margin: 0; padding: 10px 12px; border-radius: 7px;
+  background: #14161b; border: 1px solid var(--line); border-left: 3px solid var(--line-2);
+  font-family: var(--mono); font-size: 12px; line-height: 1.6;
   color: var(--fg); overflow-x: auto; white-space: pre;
 }
 
@@ -551,15 +557,28 @@ body.tree-open #scene { visibility: hidden; }
 .note-head .icon-btn:hover { background: rgba(0, 0, 0, .3); color: var(--fg); }
 
 .note-body {
-  flex: 1; min-height: 0; overflow: auto;
-  padding: 16px 18px; background: rgba(20, 22, 27, .94);
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  padding: 20px 22px 24px; background: rgba(20, 22, 27, .96);
+  scrollbar-width: thin; touch-action: pan-y; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
-.note-body p { margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: var(--fg); }
-.note-body p.note-aside { font-size: 12px; color: var(--fg-dim); }
+.note-body::-webkit-scrollbar { width: 10px; }
+.note-body::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 6px; border: 3px solid transparent; background-clip: padding-box; }
+.note-body::-webkit-scrollbar-track { background: transparent; }
+.note-body p {
+  margin: 0 0 14px; font-size: 13.5px; line-height: 1.68;
+  color: var(--fg); max-width: 58ch;
+}
+.note-body p:last-child { margin-bottom: 0; }
+.note-body p.note-aside {
+  font-size: 12.5px; color: var(--fg-dim); line-height: 1.6;
+  padding-left: 12px; border-left: 2px solid var(--line-2);
+}
 .note-label {
-  font-size: 9px; letter-spacing: .2em; text-transform: uppercase;
-  color: var(--fg-faint); margin: 4px 0 7px;
+  font-size: 9px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--fg-faint); margin: 18px 0 8px;
 }
+.note-rule { height: 0; margin: 20px 0; border: 0; border-top: 1px solid var(--line); }
 .note-code {
   margin: 0 0 13px; padding: 11px 13px;
   background: #14161b; border: 1px solid var(--line);
@@ -569,15 +588,15 @@ body.tree-open #scene { visibility: hidden; }
 }
 
 .note-foot {
-  display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
-  padding: 9px 12px; border-top: 1px solid var(--line);
-  background: rgba(0, 0, 0, .18);
+  display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
+  padding: 9px 12px 9px 20px; border-top: 1px solid var(--line);
+  background: rgba(0, 0, 0, .2);
 }
-.note-dots { flex: 1; display: flex; gap: 5px; }
-.note-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--line-2); }
-.note-dot.is-on { background: var(--gold); }
-.note-foot .btn { padding: 6px 16px; font-size: 12px; }
-.note-prev[hidden] { display: none; }
+.note-hint {
+  flex: 1; font-size: 9px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--fg-faint);
+}
+.note-foot .btn { padding: 6px 18px; font-size: 12px; }
 
 .note-grip {
   position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;

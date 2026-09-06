@@ -20,12 +20,12 @@ export const INTRO = {
         note: 'The drone breaks the ore under it. Stone grows back, so this tile never runs out.',
       },
       {
-        body: 'One line runs once. To keep going, wrap it in a loop. Everything indented under the colon belongs to the loop.',
-        code: 'while True:\n    mine()',
-        note: 'This never stops on its own. Press the stop button when you want it to end.',
+        body: 'A program runs top to bottom and then stops, so pressing play again is how you dig again. Right now the drone knows two commands, and you can put them in any order:',
+        code: 'mine()\nmove(right)\nmine()',
+        note: 'move takes a direction: up, down, left or right. Fly off one edge and the drone comes back on the opposite one.',
       },
       {
-        body: 'Ore pays for upgrades. Press Esc to open the upgrade screen, buy a bigger island, and your drone will have somewhere to fly.\n\nEvery upgrade you buy teaches you a new command, and a card like this one will explain it.',
+        body: 'Ore pays for upgrades. Press Esc to open the upgrade screen, buy a bigger island, and your drone will have somewhere to fly. Buy Loops and you can stop pressing play — the drone will repeat by itself.\n\nEvery upgrade you buy teaches you a new command, and a note like this one will explain it.',
       },
     ],
   },
@@ -38,12 +38,12 @@ export const INTRO = {
         note: 'Dron rozbija rudę pod sobą. Kamień odrasta, więc to pole nigdy się nie wyczerpie.',
       },
       {
-        body: 'Jedna linijka wykonuje się raz. Żeby powtarzać, owiń ją w pętlę. Wszystko wcięte pod dwukropkiem należy do pętli.',
-        code: 'while True:\n    mine()',
-        note: 'To nie skończy się samo. Wciśnij przycisk stop, kiedy chcesz przerwać.',
+        body: 'Program wykonuje się od góry do dołu i się kończy, więc żeby kopać dalej, wciskasz odtwarzanie jeszcze raz. Na razie dron zna dwie komendy i możesz je ustawiać w dowolnej kolejności:',
+        code: 'mine()\nmove(right)\nmine()',
+        note: 'move przyjmuje kierunek: up, down, left albo right. Wylecisz za jedną krawędź, wrócisz z przeciwnej.',
       },
       {
-        body: 'Za rudę kupujesz ulepszenia. Wciśnij Esc, żeby otworzyć ekran ulepszeń, kup większą wyspę, a dron będzie miał gdzie latać.\n\nKażde kupione ulepszenie uczy nowej komendy, a karta taka jak ta ją wyjaśni.',
+        body: 'Za rudę kupujesz ulepszenia. Wciśnij Esc, żeby otworzyć ekran ulepszeń, kup większą wyspę, a dron będzie miał gdzie latać. Kup Pętle, a przestaniesz klikać odtwarzanie — dron będzie powtarzał sam.\n\nKażde kupione ulepszenie uczy nowej komendy, a notatka taka jak ta ją wyjaśni.',
       },
     ],
   },
@@ -83,12 +83,12 @@ export const LESSONS = {
     pl: { deep: 'Czujnik niczego nie zmienia, tylko odpowiada na pytanie o pole w tej chwili. Sekundę później odpowiedź może być inna, więc pytaj wewnątrz pętli, zamiast zapamiętać raz.', title: 'Czujniki', body: 'Teraz dron może popatrzeć, zanim zadziała. can_mine() jest prawdą tylko wtedy, gdy ruda pod nim dojrzała.', code: 'while True:\n    if can_mine():\n        mine()\n    move(right)', note: 'Dostajesz też get_ore(), get_pos_x(), get_pos_y() i get_world_size().' },
   },
   print: {
-    en: { deep: 'print does not affect the drone at all. It exists so you can see what your program believes is happening — the fastest way to find out why a program does the wrong thing.', title: 'Speech', body: 'print puts a speech bubble over your drone so you can see what your program is thinking. Everyone in the room sees it.', code: 'print("digging")\nprint(get_pos_x())', note: 'Text goes in quotes. Numbers and sensor results do not need them.' },
-    pl: { deep: 'print w ogóle nie wpływa na drona. Jest po to, żebyś zobaczył, co twój program uważa za prawdę — najszybszy sposób, żeby zrozumieć, czemu robi nie to, co trzeba.', title: 'Mowa', body: 'print wyświetla dymek nad dronem, żebyś widział, co myśli twój program. Widzą go wszyscy w pokoju.', code: 'print("kopie")\nprint(get_pos_x())', note: 'Tekst wpisujesz w cudzysłowie. Liczby i wyniki czujników go nie potrzebują.' },
+    en: { deep: 'print does not affect the drone at all. It exists so you can see what your program believes is happening — the fastest way to find out why a program does the wrong thing.', title: 'Speech', body: 'print puts a speech bubble over your drone so you can see what your program is thinking. Everyone in the room sees it.', code: 'print("digging")\nmine()\nprint("done")', note: 'Text goes in quotes. Numbers and sensor results do not need them.' },
+    pl: { deep: 'print w ogóle nie wpływa na drona. Jest po to, żebyś zobaczył, co twój program uważa za prawdę — najszybszy sposób, żeby zrozumieć, czemu robi nie to, co trzeba.', title: 'Mowa', body: 'print wyświetla dymek nad dronem, żebyś widział, co myśli twój program. Widzą go wszyscy w pokoju.', code: 'print("kopie")\nmine()\nprint("gotowe")', note: 'Tekst wpisujesz w cudzysłowie. Liczby i wyniki czujników go nie potrzebują.' },
   },
   wait: {
-    en: { deep: 'wait blocks only your own drone. The rest of the mine keeps running, ore keeps ripening, and the other players keep working while you stand still.', title: 'Patience', body: 'wait pauses the drone without burning an action. Useful when ore needs a moment to ripen.', code: 'while True:\n    if can_mine():\n        mine()\n    wait(0.5)', note: 'The number is in seconds and can have a decimal point.' },
-    pl: { deep: 'wait blokuje tylko twojego drona. Reszta kopalni działa dalej, ruda dojrzewa, a inni gracze pracują, kiedy ty stoisz.', title: 'Cierpliwość', body: 'wait wstrzymuje drona bez marnowania akcji. Przydaje się, gdy ruda potrzebuje chwili, żeby dojrzeć.', code: 'while True:\n    if can_mine():\n        mine()\n    wait(0.5)', note: 'Liczba jest w sekundach i może mieć przecinek dziesiętny.' },
+    en: { deep: 'wait blocks only your own drone. The rest of the mine keeps running, ore keeps ripening, and the other players keep working while you stand still.', title: 'Patience', body: 'wait pauses the drone without burning an action. Useful when ore needs a moment to ripen.', code: 'while True:\n    mine()\n    wait(0.5)', note: 'The number is in seconds and can have a decimal point.' },
+    pl: { deep: 'wait blokuje tylko twojego drona. Reszta kopalni działa dalej, ruda dojrzewa, a inni gracze pracują, kiedy ty stoisz.', title: 'Cierpliwość', body: 'wait wstrzymuje drona bez marnowania akcji. Przydaje się, gdy ruda potrzebuje chwili, żeby dojrzeć.', code: 'while True:\n    mine()\n    wait(0.5)', note: 'Liczba jest w sekundach i może mieć przecinek dziesiętny.' },
   },
   speed: {
     en: { deep: 'Speed changes the time an action takes, not the number of actions. A program that wastes moves stays wasteful — it just wastes them faster.', title: 'Faster rotors', body: 'Every action now takes less time. Nothing changes in your code — the same program simply mines more.', code: 'while True:\n    mine()', note: 'Each level makes moving and mining about 15% quicker.' },
@@ -111,20 +111,20 @@ export const LESSONS = {
     pl: { deep: 'Zasada sąsiedztwa sprawdzana jest w trakcie dojrzewania, a nie przy sadzeniu. Wykopanie kamienia obok po cichu zatrzymuje żelazo tuż obok.', title: 'Żelazo', body: 'Żelazo jest warte trzy kamienie, ale złoże dojrzewa tylko wtedy, gdy sąsiednie pole ma kamień albo węgiel. Planuj, gdzie je sadzisz.', code: 'if get_ore() == none:\n    place(iron)', note: 'Złoże żelaza bez kamienia lub węgla obok zostanie na zerze na zawsze.' },
   },
   functions: {
-    en: { deep: 'A function does not run when you write it. def only remembers the lines under the name; they run when you call the name, and they can run from more than one place.', title: 'Functions', body: 'A function gives a name to a group of lines so you can use them again without copying.', code: 'def sweep_row():\n    for i in range(get_world_size()):\n        mine()\n        move(right)\n\nwhile True:\n    sweep_row()\n    move(up)', note: 'Define it once with def, then call it by name as many times as you like.' },
-    pl: { deep: 'Funkcja nie wykonuje się, kiedy ją piszesz. def tylko zapamiętuje linie pod nazwą; wykonują się, gdy zawołasz nazwę, i można ją wołać z wielu miejsc.', title: 'Funkcje', body: 'Funkcja nadaje nazwę grupie linii, żebyś mógł ich użyć ponownie bez kopiowania.', code: 'def przejedz_rzad():\n    for i in range(get_world_size()):\n        mine()\n        move(right)\n\nwhile True:\n    przejedz_rzad()\n    move(up)', note: 'Definiujesz raz przez def, potem wołasz po nazwie, ile razy chcesz.' },
+    en: { deep: 'A function does not run when you write it. def only remembers the lines under the name; they run when you call the name, and they can run from more than one place.', title: 'Functions', body: 'A function gives a name to a group of lines so you can use them again without copying.', code: 'def sweep_row():\n    for i in range(4):\n        mine()\n        move(right)\n\nwhile True:\n    sweep_row()\n    move(up)', note: 'Define it once with def, then call it by name as many times as you like.' },
+    pl: { deep: 'Funkcja nie wykonuje się, kiedy ją piszesz. def tylko zapamiętuje linie pod nazwą; wykonują się, gdy zawołasz nazwę, i można ją wołać z wielu miejsc.', title: 'Funkcje', body: 'Funkcja nadaje nazwę grupie linii, żebyś mógł ich użyć ponownie bez kopiowania.', code: 'def przejedz_rzad():\n    for i in range(4):\n        mine()\n        move(right)\n\nwhile True:\n    przejedz_rzad()\n    move(up)', note: 'Definiujesz raz przez def, potem wołasz po nazwie, ile razy chcesz.' },
   },
   for_loops: {
-    en: { deep: 'enumerate hands you the position and the item at once, so you do not have to keep a counter yourself. It is the tidy version of a variable you add one to.', title: 'For loops', body: 'A for loop walks over numbers or over a list, giving you the current one each time round.', code: 'for i in range(get_world_size()):\n    mine()\n    move(right)', note: 'range(4) gives 0, 1, 2, 3 — it stops just before the number you wrote.' },
-    pl: { deep: 'enumerate podaje naraz pozycję i element, więc nie musisz sam prowadzić licznika. To porządniejsza wersja zmiennej, do której ciągle dodajesz jeden.', title: 'Pętle for', body: 'Pętla for przechodzi po liczbach albo po liście, dając ci za każdym razem bieżący element.', code: 'for i in range(get_world_size()):\n    mine()\n    move(right)', note: 'range(4) daje 0, 1, 2, 3 — zatrzymuje się tuż przed podaną liczbą.' },
+    en: { deep: 'enumerate hands you the position and the item at once, so you do not have to keep a counter yourself. It is the tidy version of a variable you add one to.', title: 'For loops', body: 'A for loop walks over numbers or over a list, giving you the current one each time round.', code: 'plan = [up, right, down]\nfor i, step in enumerate(plan):\n    move(step)', note: 'range(4) gives 0, 1, 2, 3 — it stops just before the number you wrote.' },
+    pl: { deep: 'enumerate podaje naraz pozycję i element, więc nie musisz sam prowadzić licznika. To porządniejsza wersja zmiennej, do której ciągle dodajesz jeden.', title: 'Pętle for', body: 'Pętla for przechodzi po liczbach albo po liście, dając ci za każdym razem bieżący element.', code: 'plan = [up, right, down]\nfor i, step in enumerate(plan):\n    move(step)', note: 'range(4) daje 0, 1, 2, 3 — zatrzymuje się tuż przed podaną liczbą.' },
   },
   lists: {
-    en: { deep: 'A list is one name holding many values in a fixed order. The order is the point — it is how you write down a plan the drone follows step by step.', title: 'Lists', body: 'A list holds several values in order. Count positions from zero.', code: 'plan = [coal, iron, coal]\nfor ore in plan:\n    if get_ore() == none:\n        place(ore)\n    move(right)', note: 'len(plan) is how many items it holds, plan[0] is the first one.' },
-    pl: { deep: 'Lista to jedna nazwa trzymająca wiele wartości w ustalonej kolejności. Kolejność jest tu sensem — tak zapisujesz plan, który dron wykonuje krok po kroku.', title: 'Listy', body: 'Lista trzyma kilka wartości po kolei. Pozycje liczy się od zera.', code: 'plan = [coal, iron, coal]\nfor ruda in plan:\n    if get_ore() == none:\n        place(ruda)\n    move(right)', note: 'len(plan) to liczba elementów, plan[0] to pierwszy z nich.' },
+    en: { deep: 'A list is one name holding many values in a fixed order. The order is the point — it is how you write down a plan the drone follows step by step.', title: 'Lists', body: 'A list holds several values in order. Count positions from zero.', code: 'plan = [right, right, up]\nfor step in plan:\n    mine()\n    move(step)', note: 'len(plan) is how many items it holds, plan[0] is the first one.' },
+    pl: { deep: 'Lista to jedna nazwa trzymająca wiele wartości w ustalonej kolejności. Kolejność jest tu sensem — tak zapisujesz plan, który dron wykonuje krok po kroku.', title: 'Listy', body: 'Lista trzyma kilka wartości po kolei. Pozycje liczy się od zera.', code: 'plan = [right, right, up]\nfor krok in plan:\n    mine()\n    move(krok)', note: 'len(plan) to liczba elementów, plan[0] to pierwszy z nich.' },
   },
   dicts: {
-    en: { deep: 'A dict trades order for lookup. You cannot ask for the third item, but you can ask what belongs to a key instantly, however big the dict grows.', title: 'Dicts', body: 'A dict looks a value up by a key instead of by position.', code: 'worth = {stone: 1, coal: 2, iron: 3}\nprint(worth[get_ore()])', note: 'Use the key in square brackets to read a value back out.' },
-    pl: { deep: 'Słownik wymienia kolejność na wyszukiwanie. Nie zapytasz o trzeci element, ale natychmiast dowiesz się, co należy do klucza — niezależnie od tego, jak urośnie.', title: 'Słowniki', body: 'Słownik znajduje wartość po kluczu, a nie po pozycji.', code: 'wartosc = {stone: 1, coal: 2, iron: 3}\nprint(wartosc[get_ore()])', note: 'Klucz w nawiasach kwadratowych odczytuje wartość z powrotem.' },
+    en: { deep: 'A dict trades order for lookup. You cannot ask for the third item, but you can ask what belongs to a key instantly, however big the dict grows.', title: 'Dicts', body: 'A dict looks a value up by a key instead of by position.', code: 'worth = {stone: 1, coal: 2, iron: 3}\nplan = [stone, coal]\nfor ore in plan:\n    value = worth[ore]', note: 'Use the key in square brackets to read a value back out.' },
+    pl: { deep: 'Słownik wymienia kolejność na wyszukiwanie. Nie zapytasz o trzeci element, ale natychmiast dowiesz się, co należy do klucza — niezależnie od tego, jak urośnie.', title: 'Słowniki', body: 'Słownik znajduje wartość po kluczu, a nie po pozycji.', code: 'wartosc = {stone: 1, coal: 2, iron: 3}\nplan = [stone, coal]\nfor ruda in plan:\n    ile = wartosc[ruda]', note: 'Klucz w nawiasach kwadratowych odczytuje wartość z powrotem.' },
   },
   drones: {
     en: { deep: 'Both drones run at the same time, sharing one bank and one island. Two programs that assume they are alone will collide, so decide who works where.', title: 'More drones', body: 'spawn_drone starts a second drone running a function of yours, at the same time as your first one.', code: 'def dig():\n    while True:\n        mine()\n\nspawn_drone(dig)\nwhile True:\n    move(right)\n    mine()', note: 'Drones cannot stand on the same tile — one waits for the other to move on.' },
@@ -135,7 +135,7 @@ export const LESSONS = {
     pl: { deep: 'Wiertło to trwałe ulepszenie każdego drona, nie narzędzie, które się nosi. Po zakupie każde mine() na złocie działa, także w dronach stworzonych później.', title: 'Wiertło do złota', body: 'Wiertło pozwala kopać złoto warte pięć kamieni. Bez niego dron uderza w złoże i nic z tego nie ma.', code: 'if get_ore() == gold:\n    mine()', note: 'Możesz teraz także place(gold), za odpowiednią cenę.' },
   },
   crystal: {
-    en: { deep: 'Crystal is the first ore that punishes a careless loop. mine() with no can_mine() in front of it turns the most valuable seam in the game into nothing.', title: 'Crystal', body: 'Crystal is worth eight stone and shatters into nothing if you mine it early. Always ask first.', code: 'while True:\n    if can_mine():\n        mine()\n    wait(0.4)', note: 'can_mine() is false until the crystal is fully grown. Mining anyway wastes the whole seam.' },
-    pl: { deep: 'Kryształ to pierwsza ruda, która karze nieostrożną pętlę. mine() bez can_mine() przed nim zamienia najcenniejsze złoże w grze w nic.', title: 'Kryształ', body: 'Kryształ jest wart osiem kamieni i rozpada się w nic, jeśli wykopiesz go za wcześnie. Zawsze najpierw pytaj.', code: 'while True:\n    if can_mine():\n        mine()\n    wait(0.4)', note: 'can_mine() jest fałszem, dopóki kryształ nie urośnie. Kopanie mimo to marnuje całe złoże.' },
+    en: { deep: 'Crystal is the first ore that punishes a careless loop. mine() with no can_mine() in front of it turns the most valuable seam in the game into nothing.', title: 'Crystal', body: 'Crystal is worth eight stone and shatters into nothing if you mine it early. Always ask first.', code: 'while True:\n    if can_mine():\n        mine()', note: 'can_mine() is false until the crystal is fully grown. Mining anyway wastes the whole seam.' },
+    pl: { deep: 'Kryształ to pierwsza ruda, która karze nieostrożną pętlę. mine() bez can_mine() przed nim zamienia najcenniejsze złoże w grze w nic.', title: 'Kryształ', body: 'Kryształ jest wart osiem kamieni i rozpada się w nic, jeśli wykopiesz go za wcześnie. Zawsze najpierw pytaj.', code: 'while True:\n    if can_mine():\n        mine()', note: 'can_mine() jest fałszem, dopóki kryształ nie urośnie. Kopanie mimo to marnuje całe złoże.' },
   },
 };

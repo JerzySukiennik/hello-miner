@@ -101,7 +101,7 @@ export const TREE = [
     cost: [{ stone: 250, coal: 50 }],
   },
   {
-    id: 'for_loops', name: 'Counting Loops', levels: 1, requires: ['functions'], unlocks: ['enumerate'],
+    id: 'for_loops', name: 'Counting Loops', levels: 1, requires: ['lists'], unlocks: ['enumerate'],
     desc: 'for i, item in enumerate(plan): walks a list and counts at the same time.',
     cost: [{ stone: 300, coal: 80 }],
   },

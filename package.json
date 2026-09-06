@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/lang.test.js && node tests/sim.test.js && node tests/net.test.js && node tests/integration.test.js"
+    "test": "node tests/lang.test.js && node tests/sim.test.js && node tests/net.test.js && node tests/integration.test.js && node tests/lessons.test.js"
   },
   "devDependencies": {
     "yjs": "13.6.18"

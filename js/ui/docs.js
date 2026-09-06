@@ -30,6 +30,7 @@ export function createDocs() {
   scrim.hidden = true;
   scrim.innerHTML =
     '<div class="docs panel"><div class="pane-head"><h2>Commands</h2>' +
+    '<span class="pane-esc">D to close</span>' +
     '<button class="btn d-close">Close</button></div><div class="docs-list"></div></div>';
   const list = scrim.querySelector('.docs-list');
   scrim.querySelector('.d-close').addEventListener('click', () => api.close());

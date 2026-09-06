@@ -11,7 +11,7 @@ html, body {
   overscroll-behavior: none;
 }
 
-body { touch-action: none; }
+#scene { touch-action: none; }
 
 #scene {
   position: fixed;

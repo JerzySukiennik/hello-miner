@@ -428,6 +428,16 @@ function* callBuiltin(name, args, node, ctx) {
     case 'len':
       wantArgs('len', args, 1, node);
       return lengthOf(args[0], node);
+    case 'enumerate': {
+      const src = args[0];
+      let list;
+      if (isList(src)) list = src;
+      else if (typeof src === 'string') list = Array.from(src);
+      else if (isDict(src)) list = Array.from(src.keys());
+      else throw err(`enumerate needs a list, but got ${typeName(src)}.`, node);
+      const start = args.length > 1 ? Math.trunc(num(args[1], node, 'enumerate')) : 0;
+      return list.map((v, i) => [i + start, v]);
+    }
     case 'range':
       return makeRange(args, node);
     case 'str':
@@ -703,10 +713,16 @@ function* execStmt(node, env, ctx) {
       else if (typeof iterable === 'string') items = Array.from(iterable);
       else if (isDict(iterable)) items = Array.from(iterable.keys());
       else throw err(`I cannot walk through ${typeName(iterable)}.`, node);
+      const targets = node.names && node.names.length > 1 ? node.names : null;
       for (const item of items) {
         yield { op: 'tick' };
         ctx.line = node.line;
-        env.set(node.name, item);
+        if (targets) {
+          if (!isList(item) || item.length !== targets.length) {
+            throw err(`I need ${targets.length} values here, but got ${isList(item) ? item.length : 1}.`, node);
+          }
+          targets.forEach((n, i) => env.set(n, item[i]));
+        } else env.set(node.name, item);
         try {
           yield* execBlock(node.body, env, ctx);
         } catch (e) {

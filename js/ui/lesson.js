@@ -35,21 +35,19 @@ export function createLesson() {
     '</div>' +
     '<div class="note-body"></div>' +
     '<div class="note-foot">' +
-      '<div class="note-dots"></div>' +
-      '<button class="btn note-prev"></button>' +
-      '<button class="btn btn-primary note-next"></button>' +
+      '<span class="note-hint"></span>' +
+      '<button class="btn btn-primary note-done"></button>' +
     '</div>' +
     '<div class="note-grip"></div>';
   layer.appendChild(el);
 
   const titleEl = el.querySelector('.note-title');
   const bodyEl = el.querySelector('.note-body');
-  const dotsEl = el.querySelector('.note-dots');
-  const nextBtn = el.querySelector('.note-next');
-  const prevBtn = el.querySelector('.note-prev');
+  const doneBtn = el.querySelector('.note-done');
+  const hintEl = el.querySelector('.note-hint');
   const langsEl = el.querySelector('.note-langs');
 
-  const state = { x: 0, y: 0, moved: false, minimised: false, chip: null, item: null, page: 0, queue: [] };
+  const state = { x: 0, y: 0, moved: false, minimised: false, chip: null, item: null, queue: [] };
 
   LANGS.forEach((l) => {
     const b = document.createElement('button');
@@ -161,56 +159,55 @@ export function createLesson() {
     return frag;
   }
 
-  function pagesOf(item) {
-    if (!item) return null;
-    if (item.kind === 'intro') return INTRO[lang].pages;
-    const l = LESSONS[item.id] && LESSONS[item.id][lang];
-    if (!l) return null;
-    const p = { body: l.body, code: l.code, note: l.note };
-    return l.deep ? [p, { body: l.deep, heading: true }] : [p];
+  function section(label) {
+    const d = document.createElement('div');
+    d.className = 'note-label';
+    d.textContent = label;
+    return d;
   }
 
   function render() {
-    const pages = pagesOf(state.item);
-    if (!pages) { close(); return; }
+    const item = state.item;
+    if (!item) { close(); return; }
     const t = UI_TEXT[lang];
-    state.page = Math.min(state.page, pages.length - 1);
-    const p = pages[state.page];
+    const isIntro = item.kind === 'intro';
+    const src = isIntro ? INTRO[lang] : (LESSONS[item.id] && LESSONS[item.id][lang]);
+    if (!src) { close(); return; }
 
-    titleEl.textContent = state.item.kind === 'intro' ? INTRO[lang].title : LESSONS[state.item.id][lang].title;
-
+    titleEl.textContent = src.title;
     bodyEl.textContent = '';
-    if (p.heading) {
-      const h = document.createElement('div');
-      h.className = 'note-label';
-      h.textContent = lang === 'pl' ? 'Co to robi naprawdę' : 'What it really does';
-      bodyEl.appendChild(h);
-    }
-    bodyEl.appendChild(paragraphs(p.body));
-    if (p.code) {
-      const tryIt = document.createElement('div');
-      tryIt.className = 'note-label';
-      tryIt.textContent = t.tryIt;
-      bodyEl.appendChild(tryIt);
-      bodyEl.appendChild(codeBlock(p.code));
-    }
-    if (p.note) bodyEl.appendChild(paragraphs(p.note, 'note-aside'));
-    bodyEl.scrollTop = 0;
 
-    dotsEl.textContent = '';
-    pages.forEach((_, i) => {
-      const d = document.createElement('span');
-      d.className = 'note-dot' + (i === state.page ? ' is-on' : '');
-      dotsEl.appendChild(d);
+    const blocks = isIntro
+      ? src.pages.map((p) => ({ body: p.body, code: p.code, note: p.note }))
+      : [{ body: src.body, code: src.code, note: src.note }];
+
+    blocks.forEach((b, i) => {
+      if (i > 0) bodyEl.appendChild(document.createElement('hr')).className = 'note-rule';
+      bodyEl.appendChild(paragraphs(b.body));
+      if (b.code) {
+        bodyEl.appendChild(section(t.tryIt));
+        bodyEl.appendChild(codeBlock(b.code));
+      }
+      if (b.note) bodyEl.appendChild(paragraphs(b.note, 'note-aside'));
     });
-    prevBtn.textContent = t.back;
-    prevBtn.hidden = state.page === 0;
-    nextBtn.textContent = state.page < pages.length - 1 ? t.next : t.gotIt;
+
+    if (!isIntro && src.deep) {
+      bodyEl.appendChild(document.createElement('hr')).className = 'note-rule';
+      bodyEl.appendChild(section(lang === 'pl' ? 'Co to robi naprawdę' : 'What it really does'));
+      bodyEl.appendChild(paragraphs(src.deep));
+    }
+
+    bodyEl.scrollTop = 0;
+    doneBtn.textContent = t.gotIt;
+    hintEl.textContent = '';
+    requestAnimationFrame(() => {
+      const more = bodyEl.scrollHeight - bodyEl.clientHeight > 8;
+      hintEl.textContent = more ? (lang === 'pl' ? 'Przewiń, żeby przeczytać dalej' : 'Scroll to read on') : '';
+    });
   }
 
   function open(item) {
     state.item = item;
-    state.page = 0;
     if (state.minimised) restore();
     el.hidden = false;
     paintLangs();
@@ -245,13 +242,9 @@ export function createLesson() {
     if (state.item) el.hidden = false;
   }
 
-  nextBtn.addEventListener('click', () => {
-    const pages = pagesOf(state.item);
-    if (pages && state.page < pages.length - 1) { state.page += 1; render(); return; }
-    close();
-  });
-  prevBtn.addEventListener('click', () => {
-    if (state.page > 0) { state.page -= 1; render(); }
+  doneBtn.addEventListener('click', close);
+  bodyEl.addEventListener('scroll', () => {
+    if (bodyEl.scrollTop + bodyEl.clientHeight >= bodyEl.scrollHeight - 8) hintEl.textContent = '';
   });
   el.querySelector('.note-close').addEventListener('click', close);
   el.querySelector('.note-min').addEventListener('click', minimise);
