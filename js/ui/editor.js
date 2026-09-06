@@ -498,6 +498,7 @@ export function createEditor(opts) {
     setReadOnly(v) { readOnly = !!v; ta.readOnly = !!v; },
     bindText,
     setExecLine(n) { if (execLine !== n) { execLine = n; drawOverlay(); } },
+    revalidate() { check(); },
     setRemote(list) { remote = list || []; drawOverlay(); },
     getErrors() { return errors; },
     getValue() { return ta.value; },

@@ -73,18 +73,67 @@ function loadOne(loader, file) {
 
 const PLAYER_COLOR = 'PlayerColor';
 
+// Meshes whose material has no name still need a bucket; these keep the old two-way split working.
+const LEGACY_GROUP = { body: PLAYER_COLOR, hatband: 'HatBand', eye: 'Eye' };
+
+function matOf(o) {
+  return Array.isArray(o.material) ? o.material[0] : o.material;
+}
+
 function matName(o) {
-  const m = Array.isArray(o.material) ? o.material[0] : o.material;
+  const m = matOf(o);
   return (m && m.name) || '';
 }
 
+function groupKey(o) {
+  return matName(o) || LEGACY_GROUP[o.name] || 'DroneDark';
+}
+
+// Splits every non-rotor mesh into one world-baked geometry per material name and
+// records that material's shading parameters, so the renderer can honour all of them.
 function buildDrone(scene) {
   const isRotor = (o) => /^rotor_/.test(o.name);
-  const isPlayerColor = (o) => matName(o) === PLAYER_COLOR || o.name === 'body';
-  const body = bake(scene, (o) => !isRotor(o) && isPlayerColor(o));
-  const frame = bake(scene, (o) => !isRotor(o) && !isPlayerColor(o));
+  scene.updateMatrixWorld(true);
+
+  const parts = new Map();
+  const materials = {};
+  scene.traverse((o) => {
+    if (!o.isMesh || !o.geometry || isRotor(o)) return;
+    const key = groupKey(o);
+    const g = cleanGeometry(o.geometry);
+    g.applyMatrix4(o.matrixWorld);
+    if (!parts.has(key)) parts.set(key, []);
+    parts.get(key).push(g);
+    if (!materials[key]) {
+      const m = matOf(o);
+      materials[key] = {
+        color: materialColor(o, 0x3a3f46),
+        roughness: m && m.roughness !== undefined ? m.roughness : 0.55,
+        metalness: m && m.metalness !== undefined ? m.metalness : 0.2,
+      };
+    }
+  });
+
+  const groups = {};
+  for (const [key, list] of parts) {
+    if (list.length === 1) { groups[key] = list[0]; continue; }
+    const merged = mergeGeometries(list, false);
+    list.forEach((p) => p.dispose());
+    groups[key] = merged;
+  }
+
   const rotorNode = findByName(scene, 'rotor_0');
-  if (!body || !frame || !rotorNode) throw new Error('drone.glb is missing body/frame/rotor_0');
+  const body = groups[PLAYER_COLOR];
+  if (!body || !rotorNode) throw new Error('drone.glb is missing PlayerColor body / rotor_0');
+
+  // Back-compat single dark geometry: everything that is not the player-coloured hat.
+  const rest = Object.keys(groups).filter((k) => k !== PLAYER_COLOR).map((k) => groups[k].clone());
+  const frame = rest.length ? (rest.length === 1 ? rest[0] : (() => {
+    const m = mergeGeometries(rest, false);
+    rest.forEach((p) => p.dispose());
+    return m;
+  })()) : null;
+  if (!frame) throw new Error('drone.glb has no dark frame geometry');
 
   const rotor = cleanGeometry(rotorNode.geometry);
   const hubs = [];
@@ -100,6 +149,8 @@ function buildDrone(scene) {
   const bladeRadius = Math.max(Math.abs(box.min.x), Math.abs(box.max.x), Math.abs(box.min.z), Math.abs(box.max.z));
 
   return {
+    groups,
+    materials,
     body,
     frame,
     rotor,

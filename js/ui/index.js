@@ -157,10 +157,14 @@ export function createUI(opts) {
       if (!next) return;
       snap = next;
       const unlocked = new Set(snap.unlocked || []);
+      const prevAllowed = allowed;
       allowed = new Set([...BASE_ALLOWED, ...unlocked]);
       hud.setInv(snap.inv, unlocked);
       tree.update(snap);
       docs.setAllowed(allowed);
+      if (prevAllowed.size !== allowed.size) {
+        for (const id of wins.ids()) wins.get(id).editor.revalidate();
+      }
       const lines = {};
       for (const d of Object.values(snap.drones || {})) {
         if (!d || !d.owner) continue;

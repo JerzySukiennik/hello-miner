@@ -9,11 +9,28 @@ const HOVER = 0.6;
 const MAX_DRONES = 32;
 const ARM_COLOR = 0x4a3a24;
 
+// Fallbacks when drone.glb does not carry one of the expected materials.
+const GROUP_FALLBACK = {
+  DroneDark: 0x3a3f46,
+  HatBand: 0x6b4a2f,
+  Eye: 0x17191c,
+};
+const PLAYER_GROUP = 'PlayerColor';
+
 function paint(geo, hex) {
   const c = new THREE.Color(hex);
   const n = geo.attributes.position.count;
   const arr = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+  geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  return geo;
+}
+
+// Same as paint(), but takes an already-resolved THREE.Color (GLB colours are linear).
+function paintLinear(geo, color) {
+  const n = geo.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { arr[i * 3] = color.r; arr[i * 3 + 1] = color.g; arr[i * 3 + 2] = color.b; }
   geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
   return geo;
 }
@@ -127,6 +144,7 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
   let bodyGeo = models.body();
   let armsGeo = models.arms();
   let ownBodyGeo = true;
+  let ownArmsGeo = true;
   let usingGLB = false;
   const hubs = [];
   for (let i = 0; i < 4; i++) {
@@ -277,11 +295,32 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
   function applyModels(assets) {
     const dm = assets && assets.drone;
     if (!dm || !dm.body || !dm.frame || !dm.rotor) return;
-    if (ownBodyGeo) { bodyGeo.dispose(); armsGeo.dispose(); }
-    bodyGeo = dm.body;
-    armsGeo = dm.frame;
+    const groups = dm.groups || {};
+    const gmats = dm.materials || {};
+
+    // One mesh per material would cost 2 extra draw calls per drone; instead the dark frame,
+    // the hat band and the eye are merged into a single vertex-coloured geometry.
+    const restNames = Object.keys(groups).filter((k) => k !== PLAYER_GROUP);
+    let restGeo = null;
+    if (restNames.length) {
+      const painted = restNames.map((k) => {
+        const info = gmats[k];
+        const col = info && info.color ? info.color : new THREE.Color(GROUP_FALLBACK[k] === undefined ? GROUP_FALLBACK.DroneDark : GROUP_FALLBACK[k]);
+        return paintLinear(groups[k].clone(), col);
+      });
+      restGeo = painted.length === 1 ? painted[0] : mergeGeometries(painted, false);
+      if (painted.length > 1) painted.forEach((g) => g.dispose());
+    }
+
+    if (ownBodyGeo) bodyGeo.dispose();
+    if (ownArmsGeo) armsGeo.dispose();
+    bodyGeo = groups[PLAYER_GROUP] || dm.body;
     ownBodyGeo = false;
+    if (restGeo) { armsGeo = restGeo; ownArmsGeo = true; }
+    else { armsGeo = dm.frame; ownArmsGeo = false; }
     usingGLB = true;
+
+    const darkInfo = gmats.DroneDark;
 
     rotorMesh.geometry.dispose();
     rotorMesh.geometry = dm.rotor;
@@ -291,9 +330,13 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
     rotorMat.flatShading = false;
     rotorMat.needsUpdate = true;
 
-    if (dm.frameColor) armMat.color.copy(dm.frameColor);
-    armMat.roughness = dm.frameRoughness === undefined ? 0.55 : dm.frameRoughness;
-    armMat.metalness = 0.2;
+    armMat.color.set(0xffffff);
+    armMat.vertexColors = !!restGeo;
+    if (!restGeo && dm.frameColor) armMat.color.copy(dm.frameColor);
+    armMat.roughness = darkInfo && darkInfo.roughness !== undefined
+      ? darkInfo.roughness
+      : (dm.frameRoughness === undefined ? 0.55 : dm.frameRoughness);
+    armMat.metalness = darkInfo && darkInfo.metalness !== undefined ? darkInfo.metalness : 0.2;
     armMat.flatShading = false;
     armMat.needsUpdate = true;
 
@@ -494,7 +537,8 @@ export function createDroneLayer(scene, models = DRONE_MODELS) {
     bodyMats.clear();
     armMat.dispose();
     drones.clear();
-    if (ownBodyGeo) { bodyGeo.dispose(); armsGeo.dispose(); }
+    if (ownBodyGeo) bodyGeo.dispose();
+    if (ownArmsGeo) armsGeo.dispose();
     rotorMesh.geometry.dispose();
     rotorMat.dispose();
     blurMesh.geometry.dispose();

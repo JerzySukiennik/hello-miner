@@ -241,9 +241,9 @@ export function createTileField(scene, models = TILE_MODELS) {
   let rockMesh = null;
   let rockSize = -1;
 
-  const BODY_TOP = new THREE.Color(0xd9a75f);
-  const BODY_SIDE = new THREE.Color(0xb8863f);
-  const BODY_BOTTOM = new THREE.Color(0x9a6f33);
+  const BODY_TOP = new THREE.Color(0xb8823f);
+  const BODY_SIDE = new THREE.Color(0x96662c);
+  const BODY_BOTTOM = new THREE.Color(0x7a5222);
   const BODY_PEBBLE = new THREE.Color(0x8e918d);
 
   // Paints a non-indexed geometry with one flat color, or per-face by normal.y when byNormal.
@@ -304,7 +304,7 @@ export function createTileField(scene, models = TILE_MODELS) {
   const quat = new THREE.Quaternion();
   const vpos = new THREE.Vector3();
   const vscale = new THREE.Vector3();
-  const colTile = new THREE.Color(0xd9a75f);
+  const colTile = new THREE.Color(0xb8823f);
   const colLavaTile = new THREE.Color(0x6b4430);
   const tmpCol = new THREE.Color();
 
