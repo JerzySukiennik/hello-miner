@@ -90,6 +90,20 @@ function grantCheat(w) {
   for (const k of Object.keys(w.inv)) w.inv[k] = 9999;
 }
 
+
+// A solo save was written under a player id this session will not get again,
+// so move its drones onto the id the room just handed us.
+function rehome(snapshot, oldId, newId) {
+  if (!snapshot || !oldId || oldId === newId) return snapshot;
+  const drones = {};
+  for (const [key, drone] of Object.entries(snapshot.drones || {})) {
+    if (!drone || drone.owner !== oldId) { drones[key] = drone; continue; }
+    const n = String(key).split(':')[1] || '1';
+    drones[`${newId}:${n}`] = { ...drone, id: `${newId}:${n}`, owner: newId };
+  }
+  return { ...snapshot, drones };
+}
+
 function startHosting(fromSnapshot) {
   world = createWorld({ seed: hashOf(room.code), lang });
   if (fromSnapshot) world.applySnapshot(fromSnapshot);
@@ -358,11 +372,17 @@ function wireRoom(created) {
   if (room.isHost) {
     const restore = pendingRestore;
     pendingRestore = null;
-    startHosting(restore ? restore.snapshot : null);
+    startHosting(restore ? rehome(restore.snapshot, restore.owner, room.id) : null);
     if (restore && restore.code) {
       try {
         const txt = room.doc.getText(room.id);
         if (!txt.length) txt.insert(0, restore.code);
+      } catch (e) { /* doc not ready */ }
+    }
+    if (restore && restore.layout) {
+      try {
+        const map = room.doc.getMap('winLayout');
+        for (const [k, v] of Object.entries(restore.layout)) map.set(k === 'self' ? room.id : k, v);
       } catch (e) { /* doc not ready */ }
     }
   }
@@ -430,9 +450,18 @@ function writeSave() {
     const snapshot = world.snapshot();
     delete snapshot.events;
     let code = '';
+    let layout = null;
     try { code = room ? room.doc.getText(room.id).toString() : ''; } catch (e) { code = ''; }
+    try {
+      const map = room && room.doc ? room.doc.getMap('winLayout') : null;
+      if (map) {
+        layout = {};
+        for (const [k, v] of map.entries()) layout[k === room.id ? 'self' : k] = v;
+      }
+    } catch (e) { layout = null; }
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      v: 1, at: Date.now(), nick: soloNick, color: soloColor, snapshot, code,
+      v: 2, at: Date.now(), nick: soloNick, color: soloColor, owner: room ? room.id : null,
+      snapshot, code, layout,
     }));
   } catch (e) { /* quota or private mode */ }
 }
