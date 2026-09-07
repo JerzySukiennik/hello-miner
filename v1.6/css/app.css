@@ -1,0 +1,82 @@
+/* Page shell for print("Hello, Miner"): full-bleed canvas, flat sky ground, mute toggle. */
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #7d97a8;
+  color: #e8eaef;
+  font-family: 'Fredoka', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+#scene { touch-action: none; }
+
+#scene {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #7d97a8;
+}
+
+#ui { position: fixed; inset: 0; pointer-events: none; }
+
+#mute {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  cursor: pointer;
+  color: #e8eaef;
+  background: rgba(28, 30, 36, .86);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 8px;
+  transition: background .18s cubic-bezier(.2, .8, .3, 1), opacity .18s cubic-bezier(.2, .8, .3, 1);
+}
+
+#mute:hover { background: rgba(48, 52, 62, .9); }
+#mute:focus-visible { outline: 2px solid #8fd9e6; outline-offset: 2px; }
+#mute[hidden] { display: none; }
+#mute .mute-off { display: none; }
+#mute[aria-pressed="true"] { opacity: .6; }
+#mute[aria-pressed="true"] .mute-on { display: none; }
+#mute[aria-pressed="true"] .mute-off { display: block; }
+
+.boot-error {
+  position: fixed;
+  inset: auto 16px 16px 16px;
+  z-index: 12000;
+  margin: 0 auto;
+  max-width: 520px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(28, 30, 36, .94);
+  border: 1px solid rgba(242, 107, 91, .6);
+  color: #f26b5b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #mute { transition-duration: .01ms; }
+}
+
+body.in-lobby #scene {
+  filter: blur(7px) saturate(.82) brightness(.72);
+  transform: scale(1.06);
+  transition: filter .5s var(--ease, ease), transform .5s var(--ease, ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  body.in-lobby #scene { transition: none; }
+}

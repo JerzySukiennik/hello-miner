@@ -1,0 +1,61 @@
+print("Hello, Miner") - sound credits
+=====================================
+
+All audio in this folder is CC0 1.0 Universal (public domain dedication).
+No attribution is legally required; it is given here as good practice.
+
+Every file originates from a Kenney (https://kenney.nl) sound pack.
+Packs are CC0 1.0: http://creativecommons.org/publicdomain/zero/1.0/
+Pack license texts: Niepotrzebne/audio-src/licenses/*.txt
+Untouched source files: Niepotrzebne/audio-src/picked/
+Rebuild script:        Niepotrzebne/audio-src/build.sh
+
+file            source file                                  pack (kenney.nl/assets)
+--------------  -------------------------------------------  ------------------------------------------
+mine.mp3        Audio/impactMining_002.ogg                    Impact Sounds 1.0      https://kenney.nl/assets/impact-sounds
+collect.mp3     Audio/confirmation_001.ogg                    Interface Sounds 1.0   https://kenney.nl/assets/interface-sounds
+move.mp3        Audio/rollover2.ogg                           UI Audio 1.0           https://kenney.nl/assets/ui-audio
+place.mp3       Audio/impactSoft_heavy_000.ogg                Impact Sounds 1.0      https://kenney.nl/assets/impact-sounds
+spawn.mp3       Audio/phaserUp3.ogg                           Digital Audio 1.0      https://kenney.nl/assets/digital-audio
+death.mp3       Audio/explosionCrunch_000.ogg                 Sci-Fi Sounds 1.0      https://kenney.nl/assets/sci-fi-sounds
+unlock.mp3      Audio/Steel jingles/jingles_STEEL01.ogg       Music Jingles 1.0      https://kenney.nl/assets/music-jingles
+grow.mp3        Audio/forceField_000.ogg                      Sci-Fi Sounds 1.0      https://kenney.nl/assets/sci-fi-sounds
+error.mp3       Audio/error_006.ogg                           Interface Sounds 1.0   https://kenney.nl/assets/interface-sounds
+click.mp3       Audio/click1.ogg                              UI Audio 1.0           https://kenney.nl/assets/ui-audio
+ambient.mp3     Audio/spaceEngineLow_000.ogg                  Sci-Fi Sounds 1.0      https://kenney.nl/assets/sci-fi-sounds
+
+Processing (ffmpeg, see Niepotrzebne/audio-src/build.sh)
+- one-shots: silence trimmed at both ends, downmixed to mono, peak-normalised
+  to -1 dBFS, encoded MP3 96 kbps / 44.1 kHz.
+- ambient.mp3 is not a raw Kenney file: a 4 s steady section of
+  spaceEngineLow_000.ogg was low-pass filtered (900 Hz), slowed to 0.85x and
+  crossfade-chained into a 20 s loop whose end crossfades back into its start,
+  then peak-normalised, widened to stereo and encoded MP3 96 kbps.
+  It remains CC0 material; the derivative is likewise CC0.
+
+Total size: ~332 KB.
+The Kenney packs were taken from the local copy in ../SatisFarm/assets/audio/kenney
+(the unmodified kenney.nl downloads, License.txt included). Only the eleven source
+files actually used were kept, in Niepotrzebne/audio-src/picked/, together with the
+six pack License.txt files.
+
+
+--- Round 2: richer mining and drone sounds (2026-09-06) ---
+Rebuilt by Niepotrzebne/audio-src/build2.sh from the same Kenney CC0 packs.
+
+mine.mp3 / mine1.mp3 / mine2.mp3
+  impactMining_000/001/002 (Kenney Impact Sounds, CC0) layered with
+  impactGeneric_light_000/001/002 delayed 70 ms at 42% gain, so each strike
+  lands and then throws debris. One of the three is picked at random per hit.
+
+crack.mp3
+  impactMining_003 mixed with impactPlate_heavy_000 at 55% gain — the heavier
+  hit used when the drone is breaking a boulder rather than ore.
+
+rotors.mp3
+  spaceEngineSmall_000 (Kenney Sci-Fi Sounds, CC0): a 3 s section low-passed
+  at 1400 Hz, high-passed at 90 Hz, slowed to 0.92x and crossfaded onto itself
+  for a seamless 6 s loop. Played continuously at low gain; the gain follows
+  how many drones are mid-action, so the mine hums when it is working.
+
+All processing: ffmpeg, loudnorm I=-16 TP=-1.0, mono, MP3 q6.
