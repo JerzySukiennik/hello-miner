@@ -41,8 +41,11 @@ export function createUI(opts) {
   const toasts = createToasts();
   const lobby = createLobby({
     colors: COLORS,
+    hasSave: opts.hasSave,
     onCreate: (d) => emit('create', d),
     onJoin: (d) => emit('join', d),
+    onSolo: (d) => emit('solo', d),
+    onNewSolo: (d) => emit('newsolo', d),
   });
   const hud = createHud({
     ores: ORES,

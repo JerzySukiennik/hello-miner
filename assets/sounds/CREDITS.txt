@@ -38,3 +38,24 @@ The Kenney packs were taken from the local copy in ../SatisFarm/assets/audio/ken
 (the unmodified kenney.nl downloads, License.txt included). Only the eleven source
 files actually used were kept, in Niepotrzebne/audio-src/picked/, together with the
 six pack License.txt files.
+
+
+--- Round 2: richer mining and drone sounds (2026-09-06) ---
+Rebuilt by Niepotrzebne/audio-src/build2.sh from the same Kenney CC0 packs.
+
+mine.mp3 / mine1.mp3 / mine2.mp3
+  impactMining_000/001/002 (Kenney Impact Sounds, CC0) layered with
+  impactGeneric_light_000/001/002 delayed 70 ms at 42% gain, so each strike
+  lands and then throws debris. One of the three is picked at random per hit.
+
+crack.mp3
+  impactMining_003 mixed with impactPlate_heavy_000 at 55% gain — the heavier
+  hit used when the drone is breaking a boulder rather than ore.
+
+rotors.mp3
+  spaceEngineSmall_000 (Kenney Sci-Fi Sounds, CC0): a 3 s section low-passed
+  at 1400 Hz, high-passed at 90 Hz, slowed to 0.92x and crossfaded onto itself
+  for a seamless 6 s loop. Played continuously at low gain; the gain follows
+  how many drones are mid-action, so the mine hums when it is working.
+
+All processing: ffmpeg, loudnorm I=-16 TP=-1.0, mono, MP3 q6.

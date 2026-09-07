@@ -1,6 +1,7 @@
 // Lobby: a left column over the live mine — eyebrow, title, rule, subtitle, menu items, one hint line.
 
 const ITEMS = [
+  { id: 'solo', label: 'Mine alone' },
   { id: 'create', label: 'Open a mine' },
   { id: 'join', label: 'Join with a code' },
   { id: 'drone', label: 'Your drone' },
@@ -135,7 +136,38 @@ export function createLobby(opts) {
     head.className = 'lobby-panel-title';
     head.textContent = (ITEMS.find((i) => i.id === id) || {}).label || '';
     panel.appendChild(head);
-    if (id === 'create') {
+    if (id === 'solo') {
+      const n = field('Your name', nickValue, (i) => { nickValue = i.value; }, { maxLength: 12, placeholder: 'miner' });
+      panel.appendChild(n.wrap);
+      const saved = opts.hasSave && opts.hasSave();
+      if (saved && saved.nick && !nickValue) {
+        nickValue = saved.nick;
+        n.input.value = saved.nick;
+      }
+      if (saved && saved.color) picked = saved.color;
+      if (saved) {
+        const p = document.createElement('p');
+        p.className = 'lobby-saved';
+        p.textContent = 'Your mine is where you left it.';
+        panel.appendChild(p);
+        panel.appendChild(action('Continue', () => { fail(''); opts.onSolo(detail()); }));
+        const fresh = action('Start over', () => {
+          fail('');
+          if (fresh.dataset.armed !== '1') {
+            fresh.dataset.armed = '1';
+            fresh.textContent = 'Erase and start over';
+            return;
+          }
+          opts.onNewSolo(detail());
+        });
+        fresh.classList.remove('btn-primary');
+        fresh.classList.add('lobby-secondary');
+        panel.appendChild(fresh);
+      } else {
+        panel.appendChild(action('Start mining', () => { fail(''); opts.onSolo(detail()); }));
+      }
+      setTimeout(() => n.input.focus(), 30);
+    } else if (id === 'create') {
       const n = field('Your name', nickValue, (i) => { nickValue = i.value; }, { maxLength: 12, placeholder: 'miner' });
       const go = action('Open the mine', () => { fail(''); opts.onCreate(detail()); });
       panel.append(n.wrap, go);

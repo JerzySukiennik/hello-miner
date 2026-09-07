@@ -2,6 +2,10 @@
 
 const SOUNDS = {
   mine: { gain: 0.75, throttle: 70 },
+  mine1: { gain: 0.75, throttle: 70 },
+  mine2: { gain: 0.75, throttle: 70 },
+  crack: { gain: 0.8, throttle: 90 },
+  rotors: { gain: 0.0, throttle: 0 },
   collect: { gain: 0.55, throttle: 60 },
   move: { gain: 0.16, throttle: 90 },
   place: { gain: 0.6, throttle: 70 },
@@ -13,6 +17,8 @@ const SOUNDS = {
   click: { gain: 0.4, throttle: 40 },
   ambient: { gain: 0.14, throttle: 0 }
 };
+
+const MINE_VARIANTS = ['mine', 'mine1', 'mine2'];
 
 const EVENT_MAP = {
   mined: ['mine'],
@@ -189,6 +195,34 @@ export function createAudio(opts = {}) {
     ambientBus.gain.linearRampToValueAtTime(SOUNDS.ambient.gain, ctx.currentTime + 2.5);
   }
 
+
+  let rotorSource = null;
+  let rotorGain = null;
+  let rotorTarget = 0;
+
+  function startRotors() {
+    if (rotorSource || !ctx) return;
+    const buf = buffers.get('rotors');
+    if (!buf) { load('rotors').then(() => { if (unlocked) startRotors(); }); return; }
+    rotorGain = ctx.createGain();
+    rotorGain.gain.value = 0.0001;
+    rotorGain.connect(ambientBus);
+    rotorSource = ctx.createBufferSource();
+    rotorSource.buffer = buf;
+    rotorSource.loop = true;
+    rotorSource.connect(rotorGain);
+    rotorSource.start();
+  }
+
+  function setActivity(movingCount) {
+    rotorTarget = Math.max(0, Math.min(1, Number(movingCount) || 0));
+    if (!ctx || !rotorGain) return;
+    const idle = 0.05;
+    const level = idle + (0.5 - idle) * rotorTarget;
+    rotorGain.gain.cancelScheduledValues(ctx.currentTime);
+    rotorGain.gain.setTargetAtTime(muted ? 0.0001 : level, ctx.currentTime, 0.25);
+  }
+
   function unlock() {
     if (!ensureContext()) return Promise.resolve(false);
     unlocked = true;
@@ -197,6 +231,7 @@ export function createAudio(opts = {}) {
       .then(() => preload())
       .then(() => {
         startAmbient();
+        startRotors();
         return true;
       })
       .catch(() => false);
@@ -210,7 +245,10 @@ export function createAudio(opts = {}) {
       const targets = EVENT_MAP[ev.type];
       if (!targets) continue;
       for (let j = 0; j < targets.length; j++) {
-        const name = targets[j];
+        let name = targets[j];
+        if (name === 'mine') {
+          name = ev.boulder ? 'crack' : MINE_VARIANTS[(Math.random() * MINE_VARIANTS.length) | 0];
+        }
         if (name === 'collect' && ev.amount !== undefined && !(ev.amount > 0)) continue;
         const options = {};
         if (name === 'collect' && (ev.type === 'mined' || ev.type === 'mine')) options.delay = COLLECT_DELAY_MS;
@@ -247,7 +285,7 @@ export function createAudio(opts = {}) {
     };
   }
 
-  return { unlock, play, handleEvents, setMuted, isMuted, preload, stats, names };
+  return { unlock, play, handleEvents, setMuted, isMuted, preload, stats, names, setActivity };
 }
 
 export { SOUNDS, EVENT_MAP };

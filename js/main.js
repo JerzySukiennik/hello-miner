@@ -22,7 +22,7 @@ const muteBtn = document.getElementById('mute');
 
 const renderer = createRenderer(canvas);
 const audio = createAudio();
-const ui = createUI({ root: uiRoot, lang, TREE, COLORS, ORE_INFO });
+const ui = createUI({ root: uiRoot, lang, TREE, COLORS, ORE_INFO, hasSave: () => hasSave() });
 
 let room = null;
 let hub = null;
@@ -205,6 +205,10 @@ function onSnapshot(snap) {
     }
   }
 
+  const drones = Object.values(snap.drones || {});
+  const busy = drones.filter((d) => d && d.action).length;
+  audio.setActivity(drones.length ? busy / drones.length : 0);
+
   const mine = snap.errors && localId ? snap.errors[localId] : null;
   if (mine && mine.message !== lastCompileToast) {
     lastCompileToast = mine.message;
@@ -351,7 +355,17 @@ function wireRoom(created) {
     console.warn('[net]', err);
   });
 
-  if (room.isHost) startHosting(null);
+  if (room.isHost) {
+    const restore = pendingRestore;
+    pendingRestore = null;
+    startHosting(restore ? restore.snapshot : null);
+    if (restore && restore.code) {
+      try {
+        const txt = room.doc.getText(room.id);
+        if (!txt.length) txt.insert(0, restore.code);
+      } catch (e) { /* doc not ready */ }
+    }
+  }
 }
 
 function hostNick() {
@@ -386,6 +400,73 @@ async function tryFirebase(code, nick, color) {
     throw err;
   }
 }
+
+
+/* ---------- solo save: one slot, local to this browser ---------- */
+
+const SAVE_KEY = 'helloMiner.solo';
+let pendingRestore = null;
+let solo = false;
+let saveTimer = 0;
+
+function readSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !data.snapshot) return null;
+    return data;
+  } catch (e) { return null; }
+}
+
+export function hasSave() {
+  const d = readSave();
+  return d ? { nick: d.nick || '', color: d.color || null, at: d.at || 0 } : null;
+}
+
+function writeSave() {
+  if (!solo || !world) return;
+  try {
+    const snapshot = world.snapshot();
+    delete snapshot.events;
+    let code = '';
+    try { code = room ? room.doc.getText(room.id).toString() : ''; } catch (e) { code = ''; }
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      v: 1, at: Date.now(), nick: soloNick, color: soloColor, snapshot, code,
+    }));
+  } catch (e) { /* quota or private mode */ }
+}
+
+function startAutosave() {
+  clearInterval(saveTimer);
+  saveTimer = setInterval(writeSave, 5000);
+  window.addEventListener('beforeunload', writeSave);
+}
+
+export function clearSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* private mode */ }
+}
+
+let soloNick = 'miner';
+let soloColor = COLORS[0].hex;
+
+async function goSolo(detail, resume) {
+  const saved = resume ? readSave() : null;
+  soloNick = (detail && detail.nick) || (saved && saved.nick) || 'miner';
+  soloColor = (detail && detail.color) || (saved && saved.color) || COLORS[0].hex;
+  offline = true;
+  solo = true;
+  hub = createMemoryHub({ startTime: Date.now() });
+  driveHub(hub);
+  const transport = createMemoryTransport(hub);
+  const created = await createRoom({ transport, Y, code: null, nick: soloNick, color: soloColor });
+  pendingRestore = saved || null;
+  wireRoom(created);
+  history.replaceState(null, '', location.pathname + location.search.replace(/[?&]room=[A-Z]{4}/, ''));
+  if (saved) ui.toast('Mine restored');
+  startAutosave();
+}
+
 
 async function goOffline(code, nick, color, reason) {
   offline = true;
@@ -424,6 +505,8 @@ async function connect(detail, wantCode) {
   audio.unlock();
 }
 
+ui.on('solo', (d) => { if (!joining) { joining = true; goSolo(d, true).finally(() => { joining = false; audio.unlock(); }); } });
+ui.on('newsolo', (d) => { clearSave(); if (!joining) { joining = true; goSolo(d, false).finally(() => { joining = false; audio.unlock(); }); } });
 ui.on('create', (d) => connect(d, false));
 ui.on('join', (d) => connect(d, true));
 ui.on('run', ({ playerId }) => { if (room) room.sendCommand('run', { playerId }); });
