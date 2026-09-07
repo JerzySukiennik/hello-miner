@@ -29,6 +29,8 @@ function diff(a, b) {
 }
 
 export function createEditor(opts) {
+  let composing = false;
+  let lastTypedAt = 0;
   const lang = opts.lang;
   const getAllowed = opts.getAllowed || (() => null);
   const onCursor = opts.onCursor || (() => {});
@@ -206,6 +208,10 @@ export function createEditor(opts) {
 
   // --- Y.Text binding -----------------------------------------------------
 
+  const origSetSelection = (a, b) => {
+    try { ta.setSelectionRange(a, b); } catch (e) { /* detached */ }
+  };
+
   function saveRel() {
     if (!ytext) return;
     try {
@@ -229,11 +235,13 @@ export function createEditor(opts) {
   function onYChange(ev, tr) {
     if (tr && tr.origin === 'local') return;
     const next = ytext.toString();
+    const caretBefore = ta.selectionStart;
     if (next === ta.value) { last = next; return; }
     const active = document.activeElement === ta;
     ta.value = next;
     last = next;
-    if (active) restoreRel();
+    if (active && !composing && Date.now() - lastTypedAt > 400) restoreRel();
+    else if (active) origSetSelection(caretBefore, caretBefore);
     scheduleCheck();
     render();
   }
@@ -371,6 +379,7 @@ export function createEditor(opts) {
   // --- editing ------------------------------------------------------------
 
   function afterEdit() {
+    lastTypedAt = Date.now();
     pushLocal();
     scheduleCheck();
     render();
@@ -447,7 +456,18 @@ export function createEditor(opts) {
     }
   });
 
-  ta.addEventListener('input', () => {
+  ta.addEventListener('keydown', () => { lastTypedAt = Date.now(); }, true);
+  ta.addEventListener('compositionstart', () => { composing = true; });
+  ta.addEventListener('compositionend', () => {
+    composing = false;
+    pushLocal();
+    scheduleCheck();
+    render();
+    reportCursor();
+  });
+
+  ta.addEventListener('input', (e) => {
+    if (composing || (e && e.isComposing)) { render(); return; }
     pushLocal();
     scheduleCheck();
     render();
