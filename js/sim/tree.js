@@ -78,7 +78,7 @@ export const TREE = [
   {
     id: 'place', name: 'Planting', levels: 1, requires: ['coal'], unlocks: ['place', 'count'],
     desc: 'place(ore) plants an ore on an empty tile. count(ore) reads your stock.',
-    cost: [{ stone: 150, coal: 30 }],
+    cost: [{ stone: 150 }],
   },
   {
     id: 'scan', name: 'Scanner', levels: 1, requires: ['sensors'], unlocks: ['scan'],

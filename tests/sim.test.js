@@ -633,7 +633,7 @@
     const w = newWorld();
     const total = w.totalCostRemaining();
     eq(total.stone, 5345, 'the whole tree costs 5345 stone');
-    eq(total.coal, 2120, 'the whole tree costs 2120 coal');
+    eq(total.coal, 2090, 'the whole tree costs 2090 coal');
     eq(total.iron, 1190, 'the whole tree costs 1190 iron');
     eq(total.gold, 295, 'the whole tree costs 295 gold');
     eq(total.crystal, 20, 'the whole tree costs 20 crystal');

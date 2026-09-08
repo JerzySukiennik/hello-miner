@@ -6,9 +6,12 @@ import {
 import { makeRng } from './rng.js';
 import { TREE, TREE_BY_ID, MAX_DRONES_BY_LEVEL, initialLevels, remainingCost } from './tree.js';
 import {
+
   MAX_STEPS_PER_TICK, durationFor, stepInDir, isDir, isOre, makeTile, emptyTile,
   rollTile, isAdjacentOrSame,
 } from './actions.js';
+
+const STARTER_ORE = { coal: 12, iron: 8, gold: 5, crystal: 3 };
 
 const ORE_KEYS = ['stone', 'coal', 'iron', 'gold', 'crystal'];
 
@@ -619,6 +622,34 @@ export function createWorld(options = {}) {
     return true;
   }
 
+
+  // Unlocking an ore hands over a starter stock, like a packet of seeds, and plants one seam so the player can see it.
+  function seedOre(ore) {
+    const empties = [];
+    const stones = [];
+    for (let i = 0; i < state.tiles.length; i++) {
+      const t = state.tiles[i];
+      if (!t || t.kind !== 'rock') continue;
+      if (droneAtIndex(i)) continue;
+      if (t.ore === 'none') empties.push(i);
+      else if (t.ore === 'stone') stones.push(i);
+    }
+    const pool = empties.length ? empties : stones;
+    if (!pool.length) return;
+    const i = pool[Math.floor(rng() * pool.length)];
+    const t = state.tiles[i];
+    t.ore = ore;
+    t.stage = 1;
+    t.stock = 1;
+  }
+
+  function droneAtIndex(i) {
+    const x = i % state.size;
+    const y = Math.floor(i / state.size);
+    for (const d of droneList()) if (d.x === x && d.y === y) return true;
+    return false;
+  }
+
   function buy(nodeId) {
     const node = TREE_BY_ID[nodeId];
     if (!node) {
@@ -650,7 +681,12 @@ export function createWorld(options = {}) {
     for (const k of Object.keys(cost)) state.inv[k] -= cost[k];
     state.levels[nodeId] = level + 1;
     for (const u of node.unlocks) state.unlocked.add(u);
-    emit({ type: 'bought', node: nodeId, name: node.name, level: level + 1, cost });
+    const starter = STARTER_ORE[nodeId];
+    if (starter && level === 0) {
+      state.inv[nodeId] = (state.inv[nodeId] || 0) + starter;
+      seedOre(nodeId);
+    }
+    emit({ type: 'bought', node: nodeId, name: node.name, level: level + 1, cost, starter: starter || 0 });
     if (nodeId === 'grid') growGrid();
     return true;
   }
